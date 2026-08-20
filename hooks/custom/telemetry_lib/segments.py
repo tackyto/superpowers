@@ -9,12 +9,29 @@ Main-agent and subagent records are accumulated separately, so interleaved
 sidechain lines can never pollute the main stream.
 """
 
+import re
+
 from . import skills as sk
 from . import transcript as tx
 
 SCHEMA_VERSION = 1
 
 _ZERO_TOKENS = ("in", "out", "thinking", "cache_read", "cache_create_5m", "cache_create_1h")
+
+_COMMAND_NAME = re.compile(r"<command-name>/[A-Za-z0-9:_-]+</command-name>")
+
+
+def _command_hint(prompt):
+    """Only the slash-command markers of a prompt — never its prose.
+
+    `invoked_by` needs to know which skill a prompt named, and nothing else.
+    Keeping the prose would put human prompts in the state file on disk.
+    """
+    hints = _COMMAND_NAME.findall(prompt or "")
+    head = (prompt or "").lstrip().split(None, 1)[0] if (prompt or "").lstrip().startswith("/") else ""
+    if head:
+        hints.append(head)
+    return " ".join(hints)
 
 
 def _new_stream():
@@ -61,6 +78,8 @@ def _open_segment(stream, ts, wait_ms):
         "effort": None,
         "branch": None,
         "cc_version": None,
+        "mode": stream["mode"],
+        "permission_mode": stream["permission_mode"],
     }
 
 
@@ -150,7 +169,7 @@ def _feed(stream, records, out, ctx):
                 wait = max(0, now - stream["prev_turn_end_ms"])
             stream["turn"] += 1
             stream["seq"] = 0
-            stream["prompt"] = tx.prompt_text(record)
+            stream["prompt"] = _command_hint(tx.prompt_text(record))
             stream["invoked_by"] = sk.invoked_by(stream["active_skill"], stream["prompt"])
             stream["last_ms"] = now
             stream["last_blocking"] = False
@@ -205,14 +224,11 @@ def _feed(stream, records, out, ctx):
             stream["invoked_by"] = sk.invoked_by(stream["active_skill"], stream["prompt"])
             stream["seq"] += 1
             _open_segment(stream, ts, 0)
-            stream["open"]["mode"] = stream["mode"]
-            stream["open"]["permission_mode"] = stream["permission_mode"]
 
         stream["last_blocking"] = any(
             name in sk.HUMAN_BLOCKING_TOOLS for name, _params in uses)
 
-        if message.get("stop_reason") not in (None, "tool_use"):
-            stream["prev_turn_end_ms"] = tx.ts_ms(ts)
+        stream["prev_turn_end_ms"] = tx.ts_ms(ts)
 
 
 def _flush_if_stopped(stream, records, out, ctx):

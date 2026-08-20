@@ -33,6 +33,20 @@ class TestClassify(unittest.TestCase):
     def test_unknown_type(self):
         self.assertEqual(tx.classify({"type": "ai-title"}), tx.OTHER)
 
+    def test_local_command_stdout_is_not_a_turn_boundary(self):
+        record = fixtures.prompt(
+            "2026-08-21T04:00:00Z",
+            text="<local-command-stdout>ok</local-command-stdout>",
+        )
+        self.assertEqual(tx.classify(record), tx.META)
+
+    def test_command_name_prompt_is_still_a_turn_boundary(self):
+        record = fixtures.prompt(
+            "2026-08-21T04:00:00Z",
+            text="<command-name>/superpowers:brainstorming</command-name>",
+        )
+        self.assertEqual(tx.classify(record), tx.USER_PROMPT)
+
 
 class TestUsage(unittest.TestCase):
     def test_splits_cache_creation_by_ttl(self):

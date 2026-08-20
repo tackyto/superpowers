@@ -38,6 +38,10 @@ def classify(record):
             for block in content:
                 if isinstance(block, dict) and block.get("type") == "tool_result":
                     return TOOL_RESULT
+        if prompt_text(record).lstrip().startswith("<local-command-stdout>"):
+            # Command *output* echoed back into the conversation, not human
+            # input. Left as USER_PROMPT it manufactures a fake turn boundary.
+            return META
         return USER_PROMPT
 
     if kind == "mode":

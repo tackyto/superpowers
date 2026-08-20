@@ -287,5 +287,75 @@ class TestRecordShape(unittest.TestCase):
         self.assertNotIn("hunter2", _json.dumps(segments))
 
 
+class TestModeKeyIsAlwaysPresent(unittest.TestCase):
+    """Regression: a segment opened by a prompt (never touched by an
+    assistant record) used to reach _finish without "mode" / "permission_mode"
+    keys, raising KeyError on real transcripts."""
+
+    def test_two_consecutive_prompts_do_not_crash_and_carry_mode(self):
+        records = [
+            fixtures.mode("normal"),
+            fixtures.permission_mode("auto"),
+            fixtures.prompt("2026-08-21T04:00:00Z"),
+            fixtures.assistant("2026-08-21T04:00:05Z", output=10, stop_reason="end_turn"),
+            fixtures.prompt("2026-08-21T04:05:00Z"),
+            fixtures.prompt("2026-08-21T04:06:00Z"),
+            fixtures.assistant("2026-08-21T04:06:05Z", output=20, stop_reason="end_turn"),
+        ]
+        segments, _ = run(records)  # must not raise KeyError: 'mode'
+        turn2 = [s for s in segments if s["turn"] == 2]
+        self.assertEqual(len(turn2), 1)
+        self.assertEqual(turn2[0]["mode"], "normal")
+        self.assertEqual(turn2[0]["permission_mode"], "auto")
+
+
+class TestExitPlanModeIsBlocking(unittest.TestCase):
+    def test_exit_plan_mode_inside_a_turn_counts_as_wait(self):
+        records = [
+            fixtures.prompt("2026-08-21T04:00:00Z"),
+            fixtures.assistant("2026-08-21T04:00:01Z",
+                               tools=[("Skill", {"skill": "superpowers:writing-plans"})]),
+            fixtures.assistant("2026-08-21T04:00:05Z", tools=[("ExitPlanMode", {})]),
+            fixtures.tool_result("2026-08-21T04:05:05Z"),
+            fixtures.assistant("2026-08-21T04:05:10Z", stop_reason="end_turn"),
+        ]
+        segments, _ = run(records)
+        plan = [s for s in segments if s["skill"] == "superpowers:writing-plans"][0]
+        self.assertEqual(plan["wait_ms"], 300000)
+        self.assertEqual(plan["exec_ms"], 9000)
+
+
+class TestInterruptedTurnWait(unittest.TestCase):
+    def test_wait_after_an_interrupted_turn_measures_from_its_last_record(self):
+        """An interrupted turn's last record has stop_reason "tool_use" — the
+        next turn's wait must be measured from that record, not from before
+        the interrupted turn began, or its exec time gets rebilled as wait."""
+        records = [
+            fixtures.prompt("2026-08-21T04:00:00Z"),
+            fixtures.assistant("2026-08-21T04:00:05Z", stop_reason="end_turn"),
+            fixtures.prompt("2026-08-21T04:01:00Z"),
+            fixtures.assistant("2026-08-21T04:01:05Z", tools=[("Bash", {})]),
+            fixtures.assistant("2026-08-21T04:05:00Z", tools=[("Bash", {})]),
+            fixtures.prompt("2026-08-21T04:05:10Z"),
+            fixtures.assistant("2026-08-21T04:05:15Z", stop_reason="end_turn"),
+        ]
+        segments, _ = run(records)
+        turn3 = [s for s in segments if s["turn"] == 3][0]
+        self.assertEqual(turn3["seq"], 0)
+        self.assertEqual(turn3["wait_ms"], 10000)
+
+
+class TestStatePrivacy(unittest.TestCase):
+    def test_state_carries_no_prompt_prose(self):
+        secret = "my password is hunter2"
+        records = [
+            fixtures.prompt("2026-08-21T04:00:00Z", text=secret),
+            fixtures.assistant("2026-08-21T04:00:01Z", stop_reason="end_turn"),
+        ]
+        _, state = run(records)
+        import json as _json
+        self.assertNotIn("hunter2", _json.dumps(state))
+
+
 if __name__ == "__main__":
     unittest.main()
