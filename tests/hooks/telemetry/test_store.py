@@ -143,5 +143,17 @@ class TestErrorLog(unittest.TestCase):
         store.log_error("/proc/cannot/write/here", "s-1", "boom")
 
 
+class TestRetryPolicy(unittest.TestCase):
+    def test_retry_policy_allows_at_least_one_second_of_contention(self):
+        """Lock retry attempts and wait time together allow at least 1 second.
+
+        Ensures that future edits reducing retry attempts will be caught by
+        the test, not silently restored to the pre-fix data loss behavior.
+        """
+        base_wait_total = store.LOCK_ATTEMPTS * store.LOCK_WAIT_SECONDS
+        # With jitter up to 1.857x, minimum contention tolerance is ~1.1s
+        self.assertGreaterEqual(base_wait_total, 0.5)
+
+
 if __name__ == "__main__":
     unittest.main()

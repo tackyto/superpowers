@@ -12,8 +12,8 @@ import time
 from datetime import datetime, timezone
 
 STATE_MAX_AGE_DAYS = 30
-LOCK_ATTEMPTS = 3
-LOCK_WAIT_SECONDS = 0.2
+LOCK_ATTEMPTS = 12
+LOCK_WAIT_SECONDS = 0.05
 
 
 def base_dir():
@@ -45,8 +45,9 @@ def _append_locked(path, payload):
     """Append `payload` under an exclusive lock, or raise after retrying.
 
     Several sessions and subagents append to the same monthly file. Losing a
-    row matters far less than blocking the session, so this gives up quickly
-    and lets the caller log the failure.
+    batch matters far less than blocking the session, so this gives up quickly
+    and lets the caller log the failure. Jitter keeps concurrent processes
+    from waking in lockstep and colliding again immediately.
     """
     last_error = None
     for attempt in range(LOCK_ATTEMPTS):
@@ -57,7 +58,8 @@ def _append_locked(path, payload):
             handle.close()
             last_error = error
             if attempt < LOCK_ATTEMPTS - 1:
-                time.sleep(LOCK_WAIT_SECONDS)
+                jitter = LOCK_WAIT_SECONDS * (1 + (os.getpid() % 7) / 7.0)
+                time.sleep(jitter)
             continue
         try:
             handle.write(payload)
