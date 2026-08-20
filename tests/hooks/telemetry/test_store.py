@@ -84,8 +84,9 @@ class TestState(unittest.TestCase):
         self.base = os.path.join(self.dir.name, "telemetry")
 
     def test_round_trip(self):
-        store.save_state("s-1", {"line": 42, "main": {}}, self.base)
-        self.assertEqual(store.load_state("s-1", self.base, {"line": 0}), {"line": 42, "main": {}})
+        store.save_state("s-1", {"line": 42, "main": {}, "sub": {}}, self.base)
+        self.assertEqual(
+            store.load_state("s-1", self.base, {"line": 0}), {"line": 42, "main": {}, "sub": {}})
 
     def test_missing_state_returns_the_default(self):
         self.assertEqual(store.load_state("nope", self.base, {"line": 0}), {"line": 0})
@@ -99,6 +100,13 @@ class TestState(unittest.TestCase):
     def test_state_without_line_key_returns_the_default(self):
         store.save_state("s-3", {"unexpected": True}, self.base)
         self.assertEqual(store.load_state("s-3", self.base, {"line": 0}), {"line": 0})
+
+    def test_state_without_main_or_sub_key_returns_the_default(self):
+        """A state file with only "line" used to be accepted, and then
+        segments.py's `state["main"]` raised KeyError — wedging that
+        transcript's offset in place until the 30-day prune."""
+        store.save_state("s-4", {"line": 5}, self.base)
+        self.assertEqual(store.load_state("s-4", self.base, {"line": 0}), {"line": 0})
 
     def test_session_id_cannot_escape_the_state_directory(self):
         store.save_state("../../escape", {"line": 1}, self.base)

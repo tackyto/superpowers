@@ -166,6 +166,7 @@ skill 単位で集計するときは `skill` で group by すればよい。
   "turn": 7,
   "seq": 1,
   "agent": "main",
+  "agent_id": "3f9a21bc",
   "subagent_type": null,
   "parent_turn": null,
   "first_uuid": "9c1f0e2a-...",
@@ -214,13 +215,14 @@ skill 単位で集計するときは `skill` で group by すればよい。
 | `session` | string | Claude Code のセッション ID |
 | `turn` | int | セッション内のターン番号(1 起点) |
 | `seq` | int | ターン内のセグメント番号(0 起点) |
-| `agent` | string | `"main"` または `"subagent"` |
+| `agent` | string | `"main"` または `"subagent"`。`isSidechain` のみで判定する |
+| `agent_id` | string | transcript パスの 8 桁ハッシュ(sha1 先頭 8 桁)。1 つのセッションを共有する並行サブエージェントを区別する |
 | `subagent_type` | string \| null | サブエージェントの種別(`"Explore"` 等)。本体では `null` |
 | `parent_turn` | int \| null | サブエージェントを起動した親ターン。判定不能なら `null` |
 | `first_uuid` | string \| null | セグメント先頭 assistant 行の `uuid`。transcript への逆引きアンカー |
 | `skill` | string \| null | 有効だった skill。無ければ `null` |
 | `skill_rev` | string \| null | `SKILL.md` の sha256 先頭 8 桁。skill 未特定なら `null` |
-| `invoked_by` | string | `"model"` / `"user"` / `"session-start"` |
+| `invoked_by` | string | `"model"` / `"user"` |
 | `phase` | string | §8 の写像による作業フェーズ |
 | `project` | string | cwd から上へ `.git` を探して見つかったディレクトリの basename。見つからなければ cwd の basename |
 | `branch` | string \| null | transcript の `gitBranch` |
@@ -261,8 +263,10 @@ skill 単位で集計するときは `skill` で group by すればよい。
 `invoked_by` と `parent_turn` は確実な判定手段が未確定である。
 
 - `invoked_by` — ターンのユーザープロンプトがその skill のスラッシュコマンドだった場合
-  `"user"`、SessionStart による注入なら `"session-start"`、いずれでもなければ `"model"`。
-  判定不能な場合は `"model"` に倒す
+  `"user"`、いずれでもなければ `"model"`。判定不能な場合も `"model"` に倒す。
+  取りうる値は `{model, user}` の 2 つのみで、`"session-start"` は存在しない —
+  SessionStart によって注入された skill を区別する手段が無いため、その場合も
+  `"model"` に倒れ、注入されたことは記録に残らない
 - `parent_turn` — サブエージェントを起動した親ターンが特定できない場合は `null`
 
 いずれも §11 の実測で確定させ、テストで判定を明示的に検証する。
@@ -285,19 +289,38 @@ skill が増えたときに辞書へ 1 行足すだけで済む形にする。
 ## 9. 状態管理と増分読み
 
 ```
-~/.claude/superpowers/telemetry/.state/<session_id>.json
+~/.claude/superpowers/telemetry/.state/<session_id>-<transcript_path のハッシュ>.json
 
 {
   "line": 412,
-  "turn": 7,
-  "active_skill": "superpowers:test-driven-development",
-  "active_skill_rev": "a3f19c04",
-  "invoked_by": "model",
-  "last_assistant_ts": "2026-08-21T04:12:33.412Z"
+  "main": {
+    "turn": 7,
+    "seq": 1,
+    "active_skill": "superpowers:test-driven-development",
+    "active_skill_rev": "a3f19c04",
+    "invoked_by": "model",
+    "prompt": "",
+    "prev_turn_end_ms": 1755752553412,
+    "last_ms": 1755752584417,
+    "last_blocking": false,
+    "mode": "normal",
+    "permission_mode": "auto",
+    "open": null
+  },
+  "sub": { "turn": 0, "seq": 0, "active_skill": null, "…": "…同じ形" }
 }
 ```
 
-transcript は追記専用なので、処理済み行数を保持すれば増分で読める。
+キーは **セッション ID 単体ではなく、トランスクリプトファイル単位**(`transcript_path`
+の sha1 先頭 8 桁を付加したもの)。サブエージェントのトランスクリプトは親と同じ
+`session_id` を持つため、セッション ID だけをキーにすると親とサブエージェントが
+読み込み位置を共有してしまい、互いのレコードを読み飛ばす。
+
+state は `main` ストリームと `sub` ストリームを別々に保持する。`isSidechain` の
+行とそうでない行はそれぞれ独立した走査状態(ターン番号・アクティブ skill・開いて
+いるセグメント等)を持ち、混ざらない。
+
+transcript は追記専用なので、処理済み行数(`line`)を保持すれば増分で読める。
 毎ターン全文を読むとセッション長に対して O(n^2) になるため、これは必須である。
 
 `active_skill` を持ち越すことで、skill がターンをまたいで継続していても正しく引き継がれる。
@@ -314,7 +337,7 @@ transcript は追記専用なので、処理済み行数を保持すれば増分
   2026-08.jsonl
   2026-09.jsonl
   errors.log
-  .state/<session_id>.json
+  .state/<session_id>-<transcript_path のハッシュ>.json
 ```
 
 全プロジェクトが 1 ファイルに混在し、`project` フィールドで区別する。
@@ -408,7 +431,9 @@ transcript 形式に依存しており、Cursor では動かない。
 7. 壊れた JSON 行が混ざってもクラッシュせず、他の行は処理される
 8. `python3` が無い環境で `exit 0` かつ stdout が空
 9. `transcript_path` が存在しない場合も `exit 0` かつ stdout が空
-10. `invoked_by` が `"user"` / `"model"` / `"session-start"` を正しく判定する
+10. `invoked_by` が `"user"` / `"model"` を正しく判定する。取りうる値はこの 2 つ
+    のみで、`"session-start"` はどの経路からも生成されない — SessionStart で
+    注入された skill は区別できず `"model"` に倒れる
 11. `tool_errors` が `is_error` の `tool_result` を数える
 12. `tokens.cache_create_5m` と `cache_create_1h` が分離して集計される
 

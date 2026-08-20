@@ -97,6 +97,20 @@ class TestSubagentTypeFor(unittest.TestCase):
         self._write("agent-notype.meta.json", json.dumps({"description": "no agentType key"}))
         self.assertIsNone(telemetry.subagent_type_for(transcript))
 
+    def test_none_when_meta_json_is_a_list_not_a_dict(self):
+        # A bare JSON list is valid JSON but has no .get() — the guard must
+        # catch this rather than raising AttributeError.
+        transcript = os.path.join(self.dir.name, "agent-list.jsonl")
+        open(transcript, "w", encoding="utf-8").close()
+        self._write("agent-list.meta.json", json.dumps(["not", "a", "dict"]))
+        self.assertIsNone(telemetry.subagent_type_for(transcript))
+
+    def test_none_when_meta_json_is_a_bare_string(self):
+        transcript = os.path.join(self.dir.name, "agent-str.jsonl")
+        open(transcript, "w", encoding="utf-8").close()
+        self._write("agent-str.meta.json", json.dumps("just a string"))
+        self.assertIsNone(telemetry.subagent_type_for(transcript))
+
     def test_only_the_jsonl_extension_is_swapped_for_meta_json(self):
         # A main-session transcript at .../sess-1.jsonl must look for
         # .../sess-1.meta.json, not something derived from a subagents path.

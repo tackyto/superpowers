@@ -118,6 +118,27 @@ class TestIncrementalRead(unittest.TestCase):
         with self.assertRaises(OSError):
             tx.read_new_records(os.path.join(self.dir.name, "nope.jsonl"), 0)
 
+    def test_torn_final_line_is_not_counted_and_is_re_read_once_complete(self):
+        """A Stop hook can run while the writer is mid-line. The torn line
+        must not be counted into the offset — otherwise, once it completes,
+        it is never read again (it falls before the resume point)."""
+        import json as _json
+
+        with open(self.path, "w", encoding="utf-8") as handle:
+            handle.write(_json.dumps(fixtures.prompt("t1")) + "\n")
+            handle.write('{"type": "user", "timestamp": "t2", "message": {"content": "incomple')
+
+        records, total = tx.read_new_records(self.path, 0)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(total, 1)
+
+        with open(self.path, "a", encoding="utf-8") as handle:
+            handle.write('te"}}\n')
+
+        records2, total2 = tx.read_new_records(self.path, total)
+        self.assertEqual(len(records2), 1)
+        self.assertEqual(total2, 2)
+
 
 class TestTimestamps(unittest.TestCase):
     def test_parses_zulu(self):

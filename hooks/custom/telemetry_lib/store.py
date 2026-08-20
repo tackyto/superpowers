@@ -101,7 +101,7 @@ def load_state(session, base, default):
             loaded = json.load(handle)
     except (OSError, ValueError):
         return default
-    if not isinstance(loaded, dict) or "line" not in loaded:
+    if not isinstance(loaded, dict) or "line" not in loaded or "main" not in loaded or "sub" not in loaded:
         return default
     return loaded
 

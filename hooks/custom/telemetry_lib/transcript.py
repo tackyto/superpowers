@@ -1,8 +1,13 @@
-"""Classify and read Claude Code transcript records.
+"""Classify Claude Code transcript records and normalise their usage data.
 
-This is the only module that knows the transcript's field names. Everything
-here is a pure function over an already-parsed record, except the one
-incremental reader.
+Not the only module that knows the transcript's field names — segments.py
+reads several directly (timestamp, uuid, gitBranch, version, effort, mode,
+permissionMode, isSidechain, message.stop_reason) because they pass straight
+through to a segment untouched. What belongs here is turning a raw record
+into a decision (`classify`) or a normalised value (token usage, tool uses,
+tool errors, prompt text) a caller can accumulate, plus the one incremental
+file reader. Everything else here is a pure function over an already-parsed
+record.
 """
 
 import json
@@ -62,22 +67,30 @@ def read_new_records(path, start_line):
 
     Returns (records, total_lines). Unparseable lines are skipped but still
     counted, so the offset stays aligned with the file even when a line is
-    truncated mid-write.
+    truncated mid-write — except the very last line, which is dropped
+    instead of counted when it has no trailing newline. A hook can run while
+    the writer is mid-line; counting that torn line would advance the offset
+    past it, and it would never be re-read once it completes. Re-reading a
+    line is idempotent, so leaving it for the next call is the safe
+    direction.
     """
     records = []
     total = 0
     with open(path, "r", encoding="utf-8", errors="replace") as handle:
-        for index, line in enumerate(handle):
-            total = index + 1
-            if index < start_line:
-                continue
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                records.append(json.loads(line))
-            except ValueError:
-                continue
+        lines = handle.readlines()
+    if lines and not lines[-1].endswith("\n"):
+        lines = lines[:-1]
+    for index, line in enumerate(lines):
+        total = index + 1
+        if index < start_line:
+            continue
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except ValueError:
+            continue
     return records, total
 
 

@@ -18,20 +18,26 @@ SCHEMA_VERSION = 1
 
 _ZERO_TOKENS = ("in", "out", "thinking", "cache_read", "cache_create_5m", "cache_create_1h")
 
-_COMMAND_NAME = re.compile(r"<command-name>/[A-Za-z0-9:_-]+</command-name>")
+_COMMAND_NAME = re.compile(r"^<command-name>/[A-Za-z0-9:_-]+</command-name>")
 
 
 def _command_hint(prompt):
-    """Only the slash-command markers of a prompt — never its prose.
+    """Only the slash-command marker leading a prompt — never its prose.
 
     `invoked_by` needs to know which skill a prompt named, and nothing else.
-    Keeping the prose would put human prompts in the state file on disk.
+    The marker must lead the prompt: prose that merely quotes a
+    <command-name> marker elsewhere in the text — as this repo's own briefs
+    do — is not an invocation, and scanning the whole prompt for one would
+    misattribute it. Keeping the prose would also put human prompts in the
+    state file on disk.
     """
-    hints = _COMMAND_NAME.findall(prompt or "")
-    head = (prompt or "").lstrip().split(None, 1)[0] if (prompt or "").lstrip().startswith("/") else ""
-    if head:
-        hints.append(head)
-    return " ".join(hints)
+    stripped = (prompt or "").lstrip()
+    match = _COMMAND_NAME.match(stripped)
+    if match:
+        return match.group(0)
+    if stripped.startswith("/"):
+        return stripped.split(None, 1)[0]
+    return ""
 
 
 def _new_stream():
@@ -122,6 +128,7 @@ def _finish(segment, ctx):
         "turn": segment["turn"],
         "seq": segment["seq"],
         "agent": ctx.get("agent"),
+        "agent_id": ctx.get("agent_id"),
         "subagent_type": ctx.get("subagent_type"),
         "parent_turn": ctx.get("parent_turn"),
         "first_uuid": segment["first_uuid"],
@@ -257,7 +264,7 @@ def build_segments(records, state, ctx):
     out = []
 
     main_ctx = dict(ctx)
-    main_ctx["agent"] = ctx.get("default_agent") or "main"
+    main_ctx["agent"] = "main"
     _feed(state["main"], main_records, out, main_ctx)
     _flush_if_stopped(state["main"], main_records, out, main_ctx)
 

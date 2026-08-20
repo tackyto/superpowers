@@ -9,7 +9,7 @@ from telemetry_lib import segments as sg
 
 CTX = {
     "session": "s-1",
-    "default_agent": "main",
+    "agent_id": "abc12345",
     "project": "superpowers",
     "plugin_root": None,
     "plugin_version": "1.0.0",
@@ -237,6 +237,31 @@ class TestSidechainIsolation(unittest.TestCase):
         self.assertEqual(sub[0]["tokens"]["out"], 999)
 
 
+class TestAgentLabelIsSidechainOnly(unittest.TestCase):
+    """isSidechain is the sole authority for the `agent` label. A SubagentStop
+    payload can carry a non-sidechain (main-stream) transcript, so the hook
+    event name must never be allowed to relabel main rows as "subagent"."""
+
+    def test_non_sidechain_record_is_main_even_when_ctx_hints_subagent(self):
+        records = [
+            fixtures.prompt("2026-08-21T04:00:00Z"),
+            fixtures.assistant("2026-08-21T04:00:05Z", output=10, stop_reason="end_turn"),
+        ]
+        ctx = dict(CTX)
+        ctx["default_agent"] = "subagent"  # a stray/legacy hint that must be ignored
+        segments, _ = run(records, ctx=ctx)
+        self.assertEqual(segments[0]["agent"], "main")
+
+    def test_sidechain_record_is_subagent(self):
+        records = [
+            fixtures.prompt("2026-08-21T04:00:00Z", sidechain=True),
+            fixtures.assistant("2026-08-21T04:00:05Z", output=10, stop_reason="end_turn",
+                               sidechain=True),
+        ]
+        segments, _ = run(records)
+        self.assertEqual(segments[0]["agent"], "subagent")
+
+
 class TestRecordShape(unittest.TestCase):
     def test_every_spec_field_is_present(self):
         records = [
@@ -249,13 +274,15 @@ class TestRecordShape(unittest.TestCase):
         segments, _ = run(records)
         expected = {
             "schema_version", "kind", "ts", "ts_end", "session", "turn", "seq", "agent",
-            "subagent_type", "parent_turn", "first_uuid", "skill", "skill_rev", "invoked_by",
-            "phase", "project", "branch", "cc_version", "plugin_version", "model", "effort",
-            "mode", "permission_mode", "exec_ms", "wait_ms", "api_calls", "tokens", "tools",
-            "tool_errors", "stop_reason", "compacted",
+            "agent_id", "subagent_type", "parent_turn", "first_uuid", "skill", "skill_rev",
+            "invoked_by", "phase", "project", "branch", "cc_version", "plugin_version", "model",
+            "effort", "mode", "permission_mode", "exec_ms", "wait_ms", "api_calls", "tokens",
+            "tools", "tool_errors", "stop_reason", "compacted",
         }
         self.assertEqual(set(segments[0]), expected)
+        self.assertEqual(len(expected), 32)
         self.assertEqual(segments[0]["schema_version"], 1)
+        self.assertEqual(segments[0]["agent_id"], "abc12345")
         self.assertEqual(segments[0]["kind"], "seg")
         self.assertEqual(segments[0]["first_uuid"], "u-9")
         self.assertEqual(segments[0]["branch"], "main")

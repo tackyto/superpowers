@@ -23,6 +23,7 @@ class TestPhaseMapping(unittest.TestCase):
             "superpowers:receiving-code-review": "reviewing",
             "superpowers:verification-before-completion": "reviewing",
             "superpowers:finishing-a-development-branch": "finishing",
+            "superpowers:dispatching-parallel-agents": "implementing",
         }
         for skill, expected in cases.items():
             self.assertEqual(sk.phase_for(skill), expected, skill)
@@ -100,6 +101,33 @@ class TestInvokedBy(unittest.TestCase):
     def test_no_prompt_or_no_skill(self):
         self.assertEqual(sk.invoked_by("superpowers:brainstorming", ""), "model")
         self.assertEqual(sk.invoked_by(None, "/brainstorming"), "model")
+
+    # Namespaced plugin skills ("plugin:skill") must be matched under both
+    # their bare short name and their full plugin-qualified name, in both
+    # the <command-name> marker form and the bare "/prefix" form Claude Code
+    # actually emits. Matching only the bare form inverts the signal: a
+    # skill invoked by its qualified name reads as having fired on its own.
+    def test_bare_command_name_marker_is_user(self):
+        text = "<command-name>/brainstorming</command-name>"
+        self.assertEqual(sk.invoked_by("superpowers:brainstorming", text), "user")
+
+    def test_plugin_qualified_command_name_marker_is_user(self):
+        text = "<command-name>/superpowers:brainstorming</command-name>"
+        self.assertEqual(sk.invoked_by("superpowers:brainstorming", text), "user")
+
+    def test_bare_slash_prefix_is_user(self):
+        self.assertEqual(sk.invoked_by("superpowers:brainstorming", "/brainstorming go"), "user")
+
+    def test_plugin_qualified_slash_prefix_is_user(self):
+        self.assertEqual(sk.invoked_by("superpowers:brainstorming", "/superpowers:brainstorming go"), "user")
+
+    def test_marker_quoted_in_prose_is_not_an_invocation(self):
+        """A prompt that merely quotes a <command-name> marker — as this
+        repo's own briefs do — is prose, not a real command record. Real
+        command records begin with the marker; this one doesn't."""
+        text = ("The brief shows "
+                "<command-name>/brainstorming</command-name> as an example.")
+        self.assertEqual(sk.invoked_by("superpowers:brainstorming", text), "model")
 
 
 class TestBlockingTools(unittest.TestCase):

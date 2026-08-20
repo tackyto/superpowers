@@ -17,6 +17,7 @@ PHASE_BY_SKILL = {
     "receiving-code-review": "reviewing",
     "verification-before-completion": "reviewing",
     "finishing-a-development-branch": "finishing",
+    "dispatching-parallel-agents": "implementing",
 }
 
 # Tools that stop and wait for a person. Time spent after one of these is
@@ -66,6 +67,17 @@ def plugin_version(plugin_root):
 def invoked_by(skill, prompt):
     """"user" when the turn's prompt invoked this exact skill by slash command.
 
+    Claude Code exposes a plugin skill's slash command under two names: the
+    bare short name ("/brainstorming") and the full "plugin:skill" form
+    ("/superpowers:brainstorming"). Both must be matched, in both the
+    <command-name> marker form and the bare "/name" form, or a skill invoked
+    by its plugin-qualified name reads as having fired on its own — the
+    opposite of what this field exists to capture.
+
+    The marker or slash must lead the prompt. Prose that merely quotes a
+    <command-name> marker — as this repo's own briefs do — is not an
+    invocation, so a substring match would misattribute it.
+
     A skill that only ever runs because a human typed its name is a skill
     that is failing to trigger on its own — which is the whole point of
     recording this.
@@ -73,8 +85,13 @@ def invoked_by(skill, prompt):
     name = short_name(skill)
     if not name or not prompt:
         return "model"
-    if "<command-name>/%s</command-name>" % name in prompt:
-        return "user"
-    if prompt.lstrip().startswith("/" + name):
-        return "user"
+    candidates = [name]
+    if skill and ":" in skill:
+        candidates.append(skill)
+    stripped = prompt.lstrip()
+    for candidate in candidates:
+        if stripped.startswith("<command-name>/%s</command-name>" % candidate):
+            return "user"
+        if stripped.startswith("/" + candidate):
+            return "user"
     return "model"

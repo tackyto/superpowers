@@ -201,6 +201,16 @@ else
     pass "prompt text does not leak into the output"
 fi
 
+# --- 8. the python unit test suite ------------------------------------------
+UNIT_LOG="$TEST_ROOT/unittest.log"
+if python3 -m unittest discover -s "$REPO_ROOT/tests/hooks/telemetry" -p 'test_*.py' \
+        >"$UNIT_LOG" 2>&1; then
+    pass "python unit test suite passes"
+else
+    fail "python unit test suite passes"
+    sed 's/^/      /' "$UNIT_LOG"
+fi
+
 echo
 if [ "$FAILURES" -eq 0 ]; then
     echo "All telemetry hook tests passed."

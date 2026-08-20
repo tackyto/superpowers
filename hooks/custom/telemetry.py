@@ -22,6 +22,17 @@ from telemetry_lib import store  # noqa: E402
 from telemetry_lib import transcript as tx  # noqa: E402
 
 
+def transcript_digest(transcript_path):
+    """8 hex chars identifying one transcript file.
+
+    Used both as the suffix of the state key (see `state_key`) and, emitted
+    as the `agent_id` schema field, to distinguish concurrent subagents of
+    one parent: they share the parent's session id and each number their
+    turns from 1, so without this nothing in the record tells them apart.
+    """
+    return hashlib.sha1((transcript_path or "").encode("utf-8")).hexdigest()[:8]
+
+
 def state_key(session, transcript_path):
     """A key unique to one transcript, not merely to one session.
 
@@ -29,8 +40,7 @@ def state_key(session, transcript_path):
     id. Keying on the session alone would make parent and subagent share one
     read offset and skip each other's records.
     """
-    digest = hashlib.sha1((transcript_path or "").encode("utf-8")).hexdigest()[:8]
-    return "%s-%s" % (session, digest)
+    return "%s-%s" % (session, transcript_digest(transcript_path))
 
 
 def subagent_type_for(transcript_path):
@@ -44,9 +54,12 @@ def subagent_type_for(transcript_path):
     meta = os.path.splitext(transcript_path)[0] + ".meta.json"
     try:
         with open(meta, "r", encoding="utf-8") as handle:
-            return (json.load(handle) or {}).get("agentType")
+            loaded = json.load(handle)
     except (OSError, ValueError):
         return None
+    if not isinstance(loaded, dict):
+        return None
+    return loaded.get("agentType")
 
 
 def project_of(cwd):
@@ -84,7 +97,8 @@ def run(payload, base):
     if not path or not os.path.exists(path):
         return 0
 
-    key = state_key(session, path)
+    digest = transcript_digest(path)
+    key = "%s-%s" % (session, digest)
     state = store.load_state(key, base, sg.new_state())
     records, total = tx.read_new_records(path, state.get("line", 0))
     state["line"] = total
@@ -93,10 +107,9 @@ def run(payload, base):
         return 0
 
     root = plugin_root()
-    is_subagent = payload.get("hook_event_name") == "SubagentStop"
     ctx = {
         "session": session,
-        "default_agent": "subagent" if is_subagent else "main",
+        "agent_id": digest,
         "project": project_of(payload.get("cwd")),
         "plugin_root": root,
         "plugin_version": sk.plugin_version(root),
