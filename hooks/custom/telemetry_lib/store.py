@@ -41,6 +41,16 @@ def _month_of(record):
     return datetime.now(timezone.utc).strftime("%Y-%m")
 
 
+def _lock_wait(pid):
+    """How long to wait before one retry, spread out per process.
+
+    Without the per-process spread, writers that started together keep
+    waking in lockstep and colliding with each other again — which is how
+    whole batches were being lost.
+    """
+    return LOCK_WAIT_SECONDS * (1 + (pid % 7) / 7.0)
+
+
 def _append_locked(path, payload):
     """Append `payload` under an exclusive lock, or raise after retrying.
 
@@ -58,8 +68,7 @@ def _append_locked(path, payload):
             handle.close()
             last_error = error
             if attempt < LOCK_ATTEMPTS - 1:
-                jitter = LOCK_WAIT_SECONDS * (1 + (os.getpid() % 7) / 7.0)
-                time.sleep(jitter)
+                time.sleep(_lock_wait(os.getpid()))
             continue
         try:
             handle.write(payload)

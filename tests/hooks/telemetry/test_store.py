@@ -143,16 +143,38 @@ class TestErrorLog(unittest.TestCase):
         store.log_error("/proc/cannot/write/here", "s-1", "boom")
 
 
-class TestRetryPolicy(unittest.TestCase):
-    def test_retry_policy_allows_at_least_one_second_of_contention(self):
-        """Lock retry attempts and wait time together allow at least 1 second.
+class TestLockRetryPolicy(unittest.TestCase):
+    def test_minimum_retry_attempts_prevents_batch_loss(self):
+        """Lock acquire attempts >= 8 to prevent losing batches under concurrency.
 
-        Ensures that future edits reducing retry attempts will be caught by
-        the test, not silently restored to the pre-fix data loss behavior.
+        Three attempts was measured losing entire batches (25 rows) in an 8-process
+        concurrent append workload. This test ensures reverting to that count fails
+        loudly rather than silently re-enabling data loss.
         """
-        base_wait_total = store.LOCK_ATTEMPTS * store.LOCK_WAIT_SECONDS
-        # With jitter up to 1.857x, minimum contention tolerance is ~1.1s
-        self.assertGreaterEqual(base_wait_total, 0.5)
+        self.assertGreaterEqual(store.LOCK_ATTEMPTS, 8)
+
+    def test_worst_case_wait_time_inside_hook_budget(self):
+        """Worst-case contention tolerance stays within hook timeout budget.
+
+        Worst case: LOCK_ATTEMPTS - 1 sleeps (no sleep after the last attempt),
+        each multiplied by the largest jitter factor (pid % 7 == 6).
+        Must be > 0.8s to handle real concurrent contention,
+        but < 2.0s to stay well inside the 10s hook timeout.
+        """
+        worst_case_sleeps = store.LOCK_ATTEMPTS - 1
+        worst_case_wait = worst_case_sleeps * store._lock_wait(6)
+        self.assertGreater(worst_case_wait, 0.8)
+        self.assertLess(worst_case_wait, 2.0)
+
+    def test_jitter_decorrelates_concurrent_writers(self):
+        """Different process IDs produce different wait times (decorrelation).
+
+        The jitter spreads writers that started together so they no longer wake
+        in lockstep and collide with each other again immediately. This test
+        verifies the jitter function produces distinct values across the range.
+        """
+        waits = [store._lock_wait(pid % 7) for pid in range(7)]
+        self.assertEqual(len(set(waits)), 7, "Jitter must produce 7 distinct values")
 
 
 if __name__ == "__main__":
