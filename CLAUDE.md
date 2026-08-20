@@ -47,6 +47,13 @@ feat/*  fix/*  chore/*          topic branches, one concern each
 - Run `scripts/sync-upstream.sh --check` to see what upstream has, and which files it touches
   that we have also modified.
 
+### `gh` defaults to upstream — check before every PR
+
+GitHub knows this is a fork, so `gh` resolves `obra/superpowers` as the base repository by
+default. A bare `gh pr create` here aims at upstream. The default is pinned via
+`gh repo set-default tackyto/superpowers`, but verify it (`gh repo set-default --view`) after a
+fresh clone, and pass `--repo tackyto/superpowers` explicitly on `gh pr` and `gh issue` commands.
+
 ## Every Intentional Divergence Gets Recorded
 
 When you change something that upstream also maintains — a skill, a hook, a manifest — add a row

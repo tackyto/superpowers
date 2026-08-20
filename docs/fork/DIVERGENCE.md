@@ -28,6 +28,7 @@ waiting to happen.
 | `CLAUDE.md` | Upstream's contributor/PR guidance replaced with fork policy | Upstream's `CLAUDE.md` instructs agents to open PRs against `obra/superpowers`. In this fork that is exactly the wrong behaviour. | **High** — upstream edits this file often. Ours always wins; check upstream's diff for anything worth adopting. |
 | `scripts/sync-upstream.sh` | New file | Upstream sync workflow | None (new file) |
 | `docs/fork/` | New directory | Fork documentation | None (new files) |
+| `.github/PULL_REQUEST_TEMPLATE.md` | Shortened to a fork-internal template | Upstream's version demands disclosures aimed at an external maintainer and tells submitters to target a `dev` branch that does not exist here | Low |
 
 > Plugin name kept as `superpowers`, and skill directory names kept as-is, deliberately.
 > Renaming would touch 115 `superpowers:<skill>` cross-references across 32 files and turn

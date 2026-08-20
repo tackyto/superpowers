@@ -17,6 +17,23 @@ If you find a genuine, general-purpose bug in upstream code while working here, 
 reporting *as a fresh, upstream-shaped contribution* made deliberately and separately — not as
 a PR carrying this fork's branches or customisations. Ask the human partner first.
 
+## The `gh` trap
+
+GitHub knows this repository is a fork, so **`gh` resolves the parent as the base repository by
+default**. A bare `gh pr create` here targets `obra/superpowers`, not this fork — it fails with a
+confusing "No commits between main and <branch>" rather than an obvious error, and on a branch
+name that happened to exist upstream it would succeed and open a PR at them.
+
+This repository pins the default:
+
+```bash
+gh repo set-default tackyto/superpowers     # stored as remote.origin.gh-resolved = base
+```
+
+Verify with `gh repo set-default --view` after any fresh clone. Passing `--repo
+tackyto/superpowers` explicitly on `gh pr` / `gh issue` commands costs nothing and removes the
+question entirely.
+
 ## Branch model
 
 ```
