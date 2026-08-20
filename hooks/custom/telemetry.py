@@ -98,7 +98,7 @@ def run(payload, base):
         return 0
 
     digest = transcript_digest(path)
-    key = "%s-%s" % (session, digest)
+    key = state_key(session, path)
     state = store.load_state(key, base, sg.new_state())
     records, total = tx.read_new_records(path, state.get("line", 0))
     state["line"] = total

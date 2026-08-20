@@ -153,7 +153,7 @@ skill 単位で集計するときは `skill` で group by すればよい。
 
 ## 7. スキーマ(確定版)
 
-1 行 = 1 セグメント = (session, turn, seq)。
+1 行 = 1 セグメント = (session, agent_id, turn, seq)。
 
 ```jsonc
 {

@@ -261,6 +261,28 @@ class TestAgentLabelIsSidechainOnly(unittest.TestCase):
         segments, _ = run(records)
         self.assertEqual(segments[0]["agent"], "subagent")
 
+    def test_subagent_type_is_none_for_main_and_ctx_value_for_subagent(self):
+        """Main and subagent streams keep separate turn counters, so a single batch
+        can produce rows with matching (session, turn, seq). The agent_id field
+        distinguishes them; subagent_type must also enforce the separation: main
+        rows must have null, subagent rows must carry the ctx value."""
+        records = [
+            fixtures.prompt("2026-08-21T04:00:00Z"),
+            fixtures.assistant("2026-08-21T04:00:01Z", output=10, stop_reason="end_turn"),
+            fixtures.prompt("2026-08-21T04:00:02Z", sidechain=True),
+            fixtures.assistant("2026-08-21T04:00:03Z", output=20, stop_reason="end_turn",
+                               sidechain=True),
+        ]
+        ctx = dict(CTX)
+        ctx["subagent_type"] = "Explore"
+        segments, _ = run(records, ctx=ctx)
+        main = [s for s in segments if s["agent"] == "main"]
+        sub = [s for s in segments if s["agent"] == "subagent"]
+        self.assertEqual(len(main), 1)
+        self.assertEqual(len(sub), 1)
+        self.assertIsNone(main[0]["subagent_type"])
+        self.assertEqual(sub[0]["subagent_type"], "Explore")
+
 
 class TestRecordShape(unittest.TestCase):
     def test_every_spec_field_is_present(self):

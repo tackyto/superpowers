@@ -265,6 +265,7 @@ def build_segments(records, state, ctx):
 
     main_ctx = dict(ctx)
     main_ctx["agent"] = "main"
+    main_ctx["subagent_type"] = None
     _feed(state["main"], main_records, out, main_ctx)
     _flush_if_stopped(state["main"], main_records, out, main_ctx)
 
