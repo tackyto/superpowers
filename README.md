@@ -325,15 +325,35 @@ Read [the original release announcement](https://blog.fsck.com/2025/10/09/superp
 
 ## Contributing
 
-The general contribution process for Superpowers is below. Keep in mind that we don't generally accept contributions of new skills and that any updates to skills must work across all of the coding agents we support.
+This is a personal fork, and work done here stays here. **Do not open pull requests, issues, or
+discussions against [obra/superpowers](https://github.com/obra/superpowers).** The `upstream` remote
+exists to pull their changes in, not to push ours out — its push URL is deliberately invalid so an
+accidental push fails loudly. See [docs/fork/FORK-POLICY.md](docs/fork/FORK-POLICY.md).
 
-1. Fork the repository
-2. Switch to the 'dev' branch
-3. Create a branch for your work
-4. Follow the `writing-skills` skill for creating and testing new and modified skills
-5. Submit a PR, being sure to fill in the pull request template.
+To change something in this fork:
 
-Skill-behavior tests use the drill eval harness from [superpowers-evals](https://github.com/prime-radiant-inc/superpowers-evals/), cloned into `evals/` — see `evals/README.md` for setup. Plugin-infrastructure tests live at `tests/` and run via the relevant `run-*.sh` or `npm test`.
+1. Branch off `main` — `feat/*`, `fix/*`, or `chore/*`, one concern each.
+2. Follow the `writing-skills` skill for creating and testing new and modified skills.
+3. If you touched anything upstream also maintains (a skill, a hook, a manifest), add a row to
+   [docs/fork/DIVERGENCE.md](docs/fork/DIVERGENCE.md) **in the same commit**. The next upstream merge
+   puts your change side by side with theirs, and whoever resolves that conflict needs to know what
+   you were optimising for.
+4. Open the PR against **this** repository, filling in the pull request template:
+
+   ```bash
+   gh pr create --repo tackyto/superpowers --base main
+   ```
+
+   GitHub resolves the parent as the default base repository, so a bare `gh pr create` aims at
+   upstream.
+5. Merge into `main` with `--no-ff`.
+
+To contribute to Superpowers itself, work from a fresh clone of upstream and follow upstream's own
+process (fork, the `dev` branch, their pull request template) rather than carrying this fork's
+branches over. Upstream doesn't generally accept contributions of new skills, and any update to a
+skill must work across all of the coding agents they support.
+
+Skill-behavior tests use the drill eval harness from [superpowers-evals](https://github.com/prime-radiant-inc/superpowers-evals/), cloned into `evals/` — see `evals/README.md` for setup. Plugin-infrastructure tests live at `tests/` and run via the relevant `run-*.sh`; this repository's `package.json` declares no `test` script.
 
 See `skills/writing-skills/SKILL.md` for the complete guide.
 
