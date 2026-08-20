@@ -377,12 +377,12 @@ docs/fork/DIVERGENCE.md          Custom hooks 表に 1 行追加
 "Stop": [
   { "hooks": [ { "type": "command",
       "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/custom/telemetry\"",
-      "shell": "bash", "async": true, "timeout": 10 } ] }
+      "shell": "bash", "timeout": 10 } ] }
 ],
 "SubagentStop": [
   { "hooks": [ { "type": "command",
       "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/custom/telemetry\"",
-      "shell": "bash", "async": true, "timeout": 10 } ] }
+      "shell": "bash", "timeout": 10 } ] }
 ]
 ```
 
