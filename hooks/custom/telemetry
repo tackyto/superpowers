@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#
+# Stop / SubagentStop telemetry hook for this fork.
+#
+# Records (turn x skill) segments of the session as JSONL under
+# ~/.claude/superpowers/telemetry/. See docs/fork/telemetry.md.
+#
+# Deliberately not `set -e`: this hook observes a session, it must never end
+# one. Nothing is written to stdout, because a Stop hook's stdout can change
+# what the harness does.
+
+set -uo pipefail
+
+command -v python3 >/dev/null 2>&1 || exit 0
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+python3 "${SCRIPT_DIR}/telemetry.py" >/dev/null 2>&1 || true
+
+exit 0
