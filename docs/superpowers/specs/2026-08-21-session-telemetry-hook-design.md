@@ -392,7 +392,8 @@ transcript 形式に依存しており、Cursor では動かない。
 2. **1 ターン内で `test-driven-development` から `requesting-code-review` に
    切り替わると 2 行に分かれ、時間とトークンが分離される**(中核要件)
 3. skill 無しの区間が `skill: null` として残る
-4. `wait_ms` が `seq: 0` にのみ載り、他は 0
+4. `wait_ms` にターン境界の待ちが `seq: 0` へ載り、`AskUserQuestion` の回答待ちが
+   セグメント内で `exec_ms` ではなく `wait_ms` に積まれる
 5. 同じ transcript を 2 回処理しても重複行が出ない(増分読み)
 6. active skill がターンをまたいで引き継がれる
 7. 壊れた JSON 行が混ざってもクラッシュせず、他の行は処理される
@@ -422,7 +423,7 @@ transcript 形式に依存しており、Cursor では動かない。
 
 実装順:
 
-1. 上記 4 点の実測(コードは書かず、実データの観察のみ)
+1. 上記 5 点の実測(コードは書かず、実データの観察のみ)
 2. `telemetry.py` の中核(セグメント分割と集計)を TDD で実装
 3. bash ラッパと失敗時の握り潰し
 4. `hooks.json` 登録と実セッションでの動作確認
@@ -430,7 +431,8 @@ transcript 形式に依存しており、Cursor では動かない。
 
 ### 実測結果 (2026-08-21)
 
-1. **サブエージェントの transcript** — 本タスク自身がサブエージェントとして実行された
+1. **サブエージェントの transcript(リスク1 サブエージェントの transcript の所在)** —
+   本タスク自身がサブエージェントとして実行された
    状態を観察して確定した。`isSidechain: true` の行は親トップレベルの
    `<session-id>.jsonl` には一切混ざらない(`~/.claude/projects/*/*.jsonl` を全走査
    しても isSidechain 行はゼロ件)。実際には親セッションのディレクトリ配下に
@@ -449,14 +451,15 @@ transcript 形式に依存しており、Cursor では動かない。
    必要がある。また、このサブエージェント用ファイルは `SubagentStop` を待たず
    作業中も逐次追記されることを確認した(観測中に 17 行 → 24 行 → 56 行と増加、
    同時に親トップレベルファイルの行数は不変)。
-2. **`Stop` 発火時点の最終 assistant 行** — 完了済みセッション 2 件
+2. **`Stop` 発火時点の最終 assistant 行(リスク2 `Stop` 発火時点で最終 assistant 行が
+   書き込み済みか)** — 完了済みセッション 2 件
    (`cbc6a9f5-...`, `b47b5a3d-...`)と、本セッションの直前ターンの計 3 件で、
    最後の assistant 行の `stop_reason` はいずれも `"end_turn"` だった。もう 1 件
    (`09a7f426-...`)は assistant 行が 1 つも無いセッション(`/clear` 直後に
    終了したものと見られる)で対象外。結論: 完了したターンの最終 assistant 行は
    `Stop` 発火時点で書き込み済みであり、`stop_reason != "tool_use"` を
    セグメント終端の判定に使ってよい。
-3. **スラッシュコマンドの痕跡** — `type:"user"` 行の content に
+3. **スラッシュコマンドの痕跡(リスク4 `invoked_by` の判定手段)** — `type:"user"` 行の content に
    `<command-name>/xxx</command-name>` `<command-message>...</command-message>`
    `<command-args>...</command-args>` という XML ライクなブロックがそのまま
    書き込まれることを実測で確認した(`/clear`, `/plugin`, `/login`,
@@ -465,7 +468,7 @@ transcript 形式に依存しており、Cursor では動かない。
    機構自体は確認済みであり、`invoked_by` の判定はターン先頭 user 行の text が
    `<command-name>` で始まるかどうかで `"user"` / それ以外は `"model"` と
    判定できる。
-4. **コンパクション境界** — 確定できず。親トランスクリプト 4 件とサブエージェント
+4. **コンパクション境界(リスク5 コンパクション境界の表現)** — 確定できず。親トランスクリプト 4 件とサブエージェント
    トランスクリプト 1 件の全行を走査したが、`isCompactSummary`、
    `type:"summary"`、`type:"compact-boundary"` はいずれもゼロ件だった。
    `SessionStart` の attachment 行は `hookName` に `"SessionStart:startup"` と
@@ -473,7 +476,8 @@ transcript 形式に依存しており、Cursor では動かない。
    観測されなかった — このマシン上のどのセッションでもコンパクションが
    発生していないためで、コンパクションが起きた際の表現が無いことの証明では
    ない。フォールバック: `compacted` は常に `false` を入れる(フィールドは残す)。
-5. **`async` の扱い** — 確定できず。インストール済みプラグインは
+5. **`async` の扱い(リスク3 `async: true` が `Stop` / `SubagentStop` で尊重されるか)** —
+   確定できず。インストール済みプラグインは
    `~/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7` と
    自分自身の `~/.claude/plugins/cache/superpowers-tackyto/superpowers/1.0.0`
    の 2 つのみで、両方とも `hooks.json` は `SessionStart` しか登録しておらず、
