@@ -1,6 +1,6 @@
 name: superpowers
-version: 6.3.0
+version: 1.0.0
 description: Superpowers skills and workflow bootstrap for Hermes Agent
-author: obra
+author: tackyto
 provides_hooks:
   - pre_llm_call
