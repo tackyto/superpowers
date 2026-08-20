@@ -8,7 +8,7 @@ Add superpowers to the `plugin` array in your `opencode.json` (global or project
 
 ```json
 {
-  "plugin": ["superpowers@git+https://github.com/obra/superpowers.git"]
+  "plugin": ["superpowers@git+https://github.com/tackyto/superpowers.git"]
 }
 ```
 
@@ -87,11 +87,12 @@ and Bun versions pin that resolved git dependency in a lockfile or cache, so a
 restart may not pick up the newest Superpowers commit. If updates do not appear,
 clear OpenCode's package cache or reinstall the plugin.
 
-To pin a specific version, use a branch or tag:
+To pin a specific version, use a branch or tag. This fork tags its own releases `vX.Y.Z`, and
+keeps upstream's tags under `upstream/vX.Y.Z`:
 
 ```json
 {
-  "plugin": ["superpowers@git+https://github.com/obra/superpowers.git#v5.0.3"]
+  "plugin": ["superpowers@git+https://github.com/tackyto/superpowers.git#v1.0.0"]
 }
 ```
 
@@ -134,7 +135,7 @@ the plugin, try installing with system npm and pointing OpenCode at the local
 package:
 
 ```powershell
-npm install superpowers@git+https://github.com/obra/superpowers.git --prefix "$HOME\.config\opencode"
+npm install superpowers@git+https://github.com/tackyto/superpowers.git --prefix "$HOME\.config\opencode"
 ```
 
 Then use the installed package path in `opencode.json`:
@@ -158,6 +159,6 @@ Then use the installed package path in `opencode.json`:
 
 ## Getting Help
 
-- Report issues: https://github.com/obra/superpowers/issues
-- Main documentation: https://github.com/obra/superpowers
+- Report issues with this fork: https://github.com/tackyto/superpowers/issues
+- Main documentation: https://github.com/tackyto/superpowers
 - OpenCode docs: https://opencode.ai/docs/

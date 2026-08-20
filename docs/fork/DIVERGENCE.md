@@ -25,10 +25,20 @@ waiting to happen.
 |---|---|---|---|
 | `.claude-plugin/`, `.cursor-plugin/`, `.codex-plugin/`, `.devin-plugin/`, `.kimi-plugin/`, `.hermes-plugin/`, `gemini-extension.json`, `package.json` | `version` reset to `1.0.0`; `author` / `homepage` / `repository` / `websiteURL` / `developerName` point at this fork | Independent release numbering and fork ownership | **High** — upstream bumps `version` on every release. Resolve by taking either side, then re-running the version bump with our number. |
 | `.claude-plugin/marketplace.json` | Marketplace renamed `superpowers-dev` → `superpowers-tackyto`; owner updated | Distinguish this fork's marketplace from upstream's | Low |
+| `README.md`, `docs/README.kimi.md`, `docs/README.opencode.md`, `.opencode/INSTALL.md`, `docs/porting-to-a-new-harness.md` | Every install instruction points at `tackyto/superpowers`. Claude Code: `/plugin marketplace add tackyto/superpowers` + `/plugin install superpowers@superpowers-tackyto`. Upstream-curated marketplace listings (Anthropic official, Codex, Cursor, Grok, Kimi) are labelled as upstream's build rather than presented as install paths. Issue links split into fork vs upstream. Kimi's `/tree/dev` pin became `/tree/main`, and the OpenCode version-pin example uses a fork tag. | Upstream's instructions install upstream's plugin — the wrong artefact here, and it collides on the shared plugin name `superpowers`. The `@` suffix is the `name` field of `.claude-plugin/marketplace.json`, not the GitHub owner, so it had to follow the marketplace rename. Upstream has a `dev` branch and this fork does not. | **High** — upstream rewrites the install section whenever a harness is added or a marketplace moves. Keep our URLs and re-apply any genuinely new harness section with fork URLs. |
+| `README.md` (Contributing section) | Upstream's "fork → `dev` branch → PR to us" steps replaced with this fork's branch / PR / divergence-ledger rules, an explicit "never PR upstream" line, and a pointer for anyone who genuinely wants to contribute to upstream. `npm test` dropped from the test instructions — this repository's `package.json` declares no `scripts` field. | Upstream's steps route contributions at `obra/superpowers` and name a `dev` branch that does not exist here — the same defect that `CLAUDE.md` was rewritten to fix, left standing in the file a human actually reads first. | **High** — upstream edits this section. Ours wins, but read their diff for real process changes worth adopting. |
 | `CLAUDE.md` | Upstream's contributor/PR guidance replaced with fork policy | Upstream's `CLAUDE.md` instructs agents to open PRs against `obra/superpowers`. In this fork that is exactly the wrong behaviour. | **High** — upstream edits this file often. Ours always wins; check upstream's diff for anything worth adopting. |
 | `scripts/sync-upstream.sh` | New file | Upstream sync workflow | None (new file) |
 | `docs/fork/` | New directory | Fork documentation | None (new files) |
 | `.github/PULL_REQUEST_TEMPLATE.md` | Shortened to a fork-internal template | Upstream's version demands disclosures aimed at an external maintainer and tells submitters to target a `dev` branch that does not exist here | Low |
+
+> **Install paths verified:** only the Claude Code path was executed end to end
+> (`/plugin marketplace add tackyto/superpowers` → `/plugin install superpowers@superpowers-tackyto`).
+> The other harnesses' commands are URL substitutions on upstream's text, not tested runs. Factory
+> Droid is the one genuinely ambiguous case: upstream documents `superpowers@superpowers` while its
+> `marketplace.json` was named `superpowers-dev`, so Droid appears to name the marketplace after the
+> repository rather than the manifest. The README keeps `@superpowers` and mentions
+> `@superpowers-tackyto` as the fallback.
 
 > Plugin name kept as `superpowers`, and skill directory names kept as-is, deliberately.
 > Renaming would touch 115 `superpowers:<skill>` cross-references across 32 files and turn
