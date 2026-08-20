@@ -50,40 +50,41 @@ If you're using Superpowers in enterprise and could benefit from commercial supp
 
 Installation differs by harness. If you use more than one, install Superpowers separately for each one.
 
+> **This is a fork.** Every command below installs
+> [`tackyto/superpowers`](https://github.com/tackyto/superpowers), not upstream
+> [`obra/superpowers`](https://github.com/obra/superpowers). Where a harness ships Superpowers
+> through its own curated marketplace — Codex, Cursor, Grok Build CLI, Kimi Code — that listing is
+> upstream's build. Install from this repository instead to get the fork, and enable only one of the
+> two: they share the plugin name `superpowers`.
+
 ### Claude Code
 
-Superpowers is available via the [official Claude plugin marketplace](https://claude.com/plugins/superpowers)
-
-#### Official Marketplace
-
-- Install the plugin from Anthropic's official marketplace:
-
-  ```bash
-  /plugin install superpowers@claude-plugins-official
-  ```
-
-#### Superpowers Marketplace
-
-The Superpowers marketplace provides Superpowers and some other related plugins for Claude Code.
+This repository doubles as its own plugin marketplace, so there is no separate marketplace
+repository to register.
 
 - Register the marketplace:
 
   ```bash
-  /plugin marketplace add obra/superpowers-marketplace
+  /plugin marketplace add tackyto/superpowers
   ```
 
-- Install the plugin from this marketplace:
+- Install the plugin. The name after `@` is the marketplace name declared in
+  `.claude-plugin/marketplace.json` — `superpowers-tackyto` — not the GitHub owner:
 
   ```bash
-  /plugin install superpowers@superpowers-marketplace
+  /plugin install superpowers@superpowers-tackyto
   ```
+
+Upstream Superpowers is also published on Anthropic's [official plugin
+marketplace](https://claude.com/plugins/superpowers) as `superpowers@claude-plugins-official`. That
+is upstream's build, not this fork — install one or the other.
 
 ### Antigravity
 
 Install Superpowers as a plugin from this repository:
 
 ```bash
-agy plugin install https://github.com/obra/superpowers
+agy plugin install https://github.com/tackyto/superpowers
 ```
 
 Antigravity runs the plugin's session-start hook, so Superpowers is active from
@@ -92,6 +93,7 @@ the first message. Reinstall with the same command to update.
 ### Codex App
 
 Superpowers is available via the [official Codex plugin marketplace](https://github.com/openai/plugins).
+_That listing is upstream's build, not this fork._
 
 - In the Codex app, click on Plugins in the sidebar.
 - You should see `Superpowers` in the Coding section.
@@ -100,6 +102,7 @@ Superpowers is available via the [official Codex plugin marketplace](https://git
 ### Codex CLI
 
 Superpowers is available via the [official Codex plugin marketplace](https://github.com/openai/plugins).
+_That listing is upstream's build, not this fork._
 
 - Open the plugin search interface:
 
@@ -117,6 +120,8 @@ Superpowers is available via the [official Codex plugin marketplace](https://git
 
 ### Cursor
 
+_Cursor's marketplace lists upstream's build, not this fork._
+
 - In Cursor Agent chat, install from marketplace:
 
   ```text
@@ -130,7 +135,7 @@ Superpowers is available via the [official Codex plugin marketplace](https://git
 - Install the plugin from this repository:
 
   ```bash
-  devin plugins install obra/superpowers
+  devin plugins install tackyto/superpowers
   ```
 
 - Update to the latest version with:
@@ -144,7 +149,7 @@ Superpowers is available via the [official Codex plugin marketplace](https://git
 - Register the marketplace:
 
   ```bash
-  droid plugin marketplace add https://github.com/obra/superpowers
+  droid plugin marketplace add https://github.com/tackyto/superpowers
   ```
 
 - Install the plugin:
@@ -153,12 +158,15 @@ Superpowers is available via the [official Codex plugin marketplace](https://git
   droid plugin install superpowers@superpowers
   ```
 
+  If Droid reports an unknown marketplace, use `superpowers@superpowers-tackyto` instead: the
+  suffix is the marketplace name, and this fork renamed it in `.claude-plugin/marketplace.json`.
+
 ### Gemini CLI
 
 - Install the extension:
 
   ```bash
-  gemini extensions install https://github.com/obra/superpowers
+  gemini extensions install https://github.com/tackyto/superpowers
   ```
 
 - Update later:
@@ -172,18 +180,19 @@ Superpowers is available via the [official Codex plugin marketplace](https://git
 - Register the marketplace:
 
   ```bash
-  copilot plugin marketplace add obra/superpowers-marketplace
+  copilot plugin marketplace add tackyto/superpowers
   ```
 
 - Install the plugin:
 
   ```bash
-  copilot plugin install superpowers@superpowers-marketplace
+  copilot plugin install superpowers@superpowers-tackyto
   ```
 
 ### Grok Build CLI
 
 Superpowers is available via the [official Grok plugin marketplace](https://github.com/xai-org/plugin-marketplace).
+_That listing is upstream's build, not this fork._
 
 - Install the plugin from xAI's official marketplace:
 
@@ -199,20 +208,12 @@ Superpowers is available via the [official Grok plugin marketplace](https://gith
 
 ### Kimi Code
 
-Superpowers is available in Kimi Code's plugin marketplace.
+Kimi Code's plugin marketplace lists upstream Superpowers, not this fork.
 
-- Open Kimi Code's plugin manager:
-
-  ```text
-  /plugins
-  ```
-
-- Go to `Marketplace` > `Superpowers` and install it.
-
-- Or install directly from this repository:
+- Install directly from this repository:
 
   ```text
-  /plugins install https://github.com/obra/superpowers
+  /plugins install https://github.com/tackyto/superpowers
   ```
 
 - Detailed docs: [docs/README.kimi.md](docs/README.kimi.md)
@@ -225,7 +226,7 @@ already use it in another harness.
 - Tell OpenCode:
 
   ```
-  Fetch and follow instructions from https://raw.githubusercontent.com/obra/superpowers/refs/heads/main/.opencode/INSTALL.md
+  Fetch and follow instructions from https://raw.githubusercontent.com/tackyto/superpowers/refs/heads/main/.opencode/INSTALL.md
   ```
 
 - Detailed docs: [docs/README.opencode.md](docs/README.opencode.md)
@@ -235,7 +236,7 @@ already use it in another harness.
 Install Superpowers as a Pi package from this repository:
 
 ```bash
-pi install git:github.com/obra/superpowers
+pi install git:github.com/tackyto/superpowers
 ```
 
 For local development, run Pi with this checkout loaded as a temporary package:
@@ -251,7 +252,7 @@ The Pi package loads the Superpowers skills and a small extension that injects t
 Install Superpowers as a Hermes plugin from this repository:
 
 ```bash
-hermes plugins install obra/superpowers --enable
+hermes plugins install tackyto/superpowers --enable
 ```
 
 Restart any active Hermes sessions after installing. Note: Hermes has no
@@ -279,10 +280,13 @@ turn loses the bootstrap — start a fresh session if skills stop triggering.
 ## Community
 
 Superpowers is built by [Jesse Vincent](https://blog.fsck.com) and the rest of the folks at [Prime Radiant](https://primeradiant.com).
+This fork is maintained separately at [tackyto/superpowers](https://github.com/tackyto/superpowers)
+and is not affiliated with them, so send fork-specific reports here rather than upstream.
 
-- **Discord**: [Join us](https://discord.gg/35wsABTejz) for community support, questions, and sharing what you're building with Superpowers
-- **Issues**: https://github.com/obra/superpowers/issues
-- **Release announcements**: [Sign up](https://primeradiant.com/superpowers/) to get notified about new versions
+- **Issues with this fork**: https://github.com/tackyto/superpowers/issues
+- **Issues with upstream Superpowers**: https://github.com/obra/superpowers/issues
+- **Discord** (upstream community): [Join us](https://discord.gg/35wsABTejz) for community support, questions, and sharing what you're building with Superpowers
+- **Release announcements** (upstream): [Sign up](https://primeradiant.com/superpowers/) to get notified about new versions
 
 ## What's Inside
 
