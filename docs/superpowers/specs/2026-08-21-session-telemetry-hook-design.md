@@ -134,13 +134,22 @@ skill 単位で集計するときは `skill` で group by すればよい。
 
 ## 6. 時間の定義
 
-- `exec_ms` — ユーザープロンプト行から、そのターンの最終 assistant 行までの経過。
-  セグメントに属する区間のみを積算する
-- `wait_ms` — 前ターンの最終 assistant 行から、次のユーザープロンプト行までの経過。
-  **ターン先頭セグメント(`seq: 0`)にのみ載せ、それ以外は 0** とする
+セグメント内の連続する 2 レコードの時刻差(ギャップ)を、次の規則で実行と待機に振り分ける。
+
+- 直前のレコードが assistant 行で、かつ **人間の応答を待つツール**
+  (`AskUserQuestion`, `ExitPlanMode`)を呼んでいた場合 → そのギャップは `wait_ms`
+- それ以外のギャップ → `exec_ms`
+
+これに加えて、ターン先頭セグメント(`seq: 0`)には
+「前ターンの最終 assistant 行から、このターンのユーザープロンプト行まで」の
+経過を `wait_ms` に加算する。
 
 この分離は必須である。試作では `brainstorming` の経過が 718.8 秒と出たが、
-その大半は人間の回答を待っていた時間だった。分離しなければ skill の重さを誤って評価する。
+その大半は `AskUserQuestion` の回答を待っていた時間だった。ターン境界だけで
+分けると、質問の多い skill を「重い skill」と誤判定する。
+
+**限界**: 権限プロンプトの待ち時間は transcript に行として残らないため分離できず、
+`exec_ms` に含まれる。
 
 ## 7. スキーマ(確定版)
 
@@ -222,7 +231,7 @@ skill 単位で集計するときは `skill` で group by すればよい。
 | `mode` | string \| null | 直近の `type:"mode"` 行の値 |
 | `permission_mode` | string \| null | 直近の `type:"permission-mode"` 行の値 |
 | `exec_ms` | int | §6 の定義による実行時間(ミリ秒) |
-| `wait_ms` | int | §6 の定義による待機時間。`seq != 0` では常に 0 |
+| `wait_ms` | int | §6 の定義による待機時間。ターン境界の待ちに加え、`AskUserQuestion` / `ExitPlanMode` の回答待ちを含む |
 | `api_calls` | int | セグメント内の assistant メッセージ数 |
 | `tokens.in` | int | `usage.input_tokens` の合計 |
 | `tokens.out` | int | `usage.output_tokens` の合計 |
@@ -418,6 +427,65 @@ transcript 形式に依存しており、Cursor では動かない。
 3. bash ラッパと失敗時の握り潰し
 4. `hooks.json` 登録と実セッションでの動作確認
 5. `docs/fork/telemetry.md` と `DIVERGENCE.md` の行追加
+
+### 実測結果 (2026-08-21)
+
+1. **サブエージェントの transcript** — 本タスク自身がサブエージェントとして実行された
+   状態を観察して確定した。`isSidechain: true` の行は親トップレベルの
+   `<session-id>.jsonl` には一切混ざらない(`~/.claude/projects/*/*.jsonl` を全走査
+   しても isSidechain 行はゼロ件)。実際には親セッションのディレクトリ配下に
+   `<parent-session-id>/subagents/agent-<agentId>.jsonl` という**専用ファイル**が
+   作られ、そのファイルの全行に `isSidechain: true` が付く。同じディレクトリに
+   `agent-<agentId>.meta.json` も生成され、`agentType`(例:
+   `"general-purpose"`)・`description`・`toolUseId`・`spawnDepth`・`model` を持つ。
+   `toolUseId` は親トランスクリプト中の `tool_use`(`name:"Agent"`)の `id` と一致し、
+   その `tool_use` の `input.subagent_type` に `subagent_type` の実値が直接入っている
+   (本タスクでは `"general-purpose"`)。親ターンは、この `tool_use` を含む
+   assistant 行を親トランスクリプト上で特定し、そこから遡ってターン開始 `user` 行を
+   探すことで求まる(実測: `toolUseId` から該当する `tool_use`/`tool_result`
+   ペアを親トランスクリプト中に特定できた)。サブエージェント側トランスクリプトの
+   先頭行は `parentUuid: null` で始まり、親トランスクリプトの uuid 連鎖には
+   繋がらない — 親ターンの特定は uuid チェーンではなく `toolUseId` の突合せで行う
+   必要がある。また、このサブエージェント用ファイルは `SubagentStop` を待たず
+   作業中も逐次追記されることを確認した(観測中に 17 行 → 24 行 → 56 行と増加、
+   同時に親トップレベルファイルの行数は不変)。
+2. **`Stop` 発火時点の最終 assistant 行** — 完了済みセッション 2 件
+   (`cbc6a9f5-...`, `b47b5a3d-...`)と、本セッションの直前ターンの計 3 件で、
+   最後の assistant 行の `stop_reason` はいずれも `"end_turn"` だった。もう 1 件
+   (`09a7f426-...`)は assistant 行が 1 つも無いセッション(`/clear` 直後に
+   終了したものと見られる)で対象外。結論: 完了したターンの最終 assistant 行は
+   `Stop` 発火時点で書き込み済みであり、`stop_reason != "tool_use"` を
+   セグメント終端の判定に使ってよい。
+3. **スラッシュコマンドの痕跡** — `type:"user"` 行の content に
+   `<command-name>/xxx</command-name>` `<command-message>...</command-message>`
+   `<command-args>...</command-args>` という XML ライクなブロックがそのまま
+   書き込まれることを実測で確認した(`/clear`, `/plugin`, `/login`,
+   `/reload-plugins` の実例で確認。`isMeta` は立たず通常の user 行として記録される)。
+   `/brainstorming` など skill 起動コマンドの実例は今回のデータには存在しなかったが、
+   機構自体は確認済みであり、`invoked_by` の判定はターン先頭 user 行の text が
+   `<command-name>` で始まるかどうかで `"user"` / それ以外は `"model"` と
+   判定できる。
+4. **コンパクション境界** — 確定できず。親トランスクリプト 4 件とサブエージェント
+   トランスクリプト 1 件の全行を走査したが、`isCompactSummary`、
+   `type:"summary"`、`type:"compact-boundary"` はいずれもゼロ件だった。
+   `SessionStart` の attachment 行は `hookName` に `"SessionStart:startup"` と
+   `"SessionStart:clear"` のみが出現し、`"SessionStart:compact"` は一度も
+   観測されなかった — このマシン上のどのセッションでもコンパクションが
+   発生していないためで、コンパクションが起きた際の表現が無いことの証明では
+   ない。フォールバック: `compacted` は常に `false` を入れる(フィールドは残す)。
+5. **`async` の扱い** — 確定できず。インストール済みプラグインは
+   `~/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7` と
+   自分自身の `~/.claude/plugins/cache/superpowers-tackyto/superpowers/1.0.0`
+   の 2 つのみで、両方とも `hooks.json` は `SessionStart` しか登録しておらず、
+   `Stop` / `SubagentStop` を使っている実例は存在しない。両方とも
+   `"async": false` のみが使われており(`"async": true` の実例はゼロ)、
+   このリポジトリの `hooks/custom/README.md` のテンプレートも
+   `"async": false` をデフォルトにしている。Claude Code の changelog
+   (`~/.claude/cache/changelog.md`)は非同期フックが一般機能として存在すること
+   (例: "async PostToolUse hooks", "async hook output", "pending async
+   hooks" 等の記述)を示すが、`Stop` / `SubagentStop` に限定した記述は無い。
+   フォールバック: Task 7 は `async` に頼らず登録する(`async: true` は落とし、
+   `async: false` にするか省略する)。
 
 ## 16. 集計レシピ
 
