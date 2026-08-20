@@ -5,6 +5,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../hooks/custom")))
 
@@ -175,6 +176,56 @@ class TestLockRetryPolicy(unittest.TestCase):
         """
         waits = [store._lock_wait(pid % 7) for pid in range(7)]
         self.assertEqual(len(set(waits)), 7, "Jitter must produce 7 distinct values")
+
+    def test_retry_loop_uses_jittered_sleep(self):
+        """The retry loop actually calls time.sleep with _lock_wait values.
+
+        The prior three tests pin the constants and the jitter function itself,
+        but do not verify that the live retry path wires them together. This test
+        catches the regression where sleep() is called with a constant instead of
+        _lock_wait(): all three guards would still pass, yet the lockstep collision
+        would return and data would be lost again.
+
+        Uses mock to observe what the loop really sleeps, without paying the
+        wall-clock cost of retrying.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = os.path.join(tmpdir, "telemetry")
+            os.makedirs(base, exist_ok=True)
+            path = os.path.join(base, "2026-08.jsonl")
+
+            # Hold the file locked from a second handle to force the retry path.
+            blocker = open(path, "a", encoding="utf-8")
+            fcntl.flock(blocker.fileno(), fcntl.LOCK_EX)
+            try:
+                # Patch sleep and getpid so we can observe the calls without delay.
+                # Use a fixed pid so we can compute the expected duration.
+                fixed_pid = 3
+                with mock.patch.object(store.time, "sleep") as mock_sleep, \
+                     mock.patch.object(store.os, "getpid", return_value=fixed_pid):
+                    with self.assertRaises(OSError):
+                        store.append_records([row()], base)
+
+                    # Verify sleep was called exactly LOCK_ATTEMPTS - 1 times.
+                    self.assertEqual(
+                        mock_sleep.call_count,
+                        store.LOCK_ATTEMPTS - 1,
+                        f"Expected {store.LOCK_ATTEMPTS - 1} sleeps, got {mock_sleep.call_count}"
+                    )
+
+                    # Verify each call received the correct jittered wait time.
+                    expected_wait = store._lock_wait(fixed_pid)
+                    for call in mock_sleep.call_args_list:
+                        actual_wait = call[0][0]
+                        self.assertAlmostEqual(
+                            actual_wait,
+                            expected_wait,
+                            places=10,
+                            msg=f"Expected sleep({expected_wait}), got sleep({actual_wait})"
+                        )
+            finally:
+                fcntl.flock(blocker.fileno(), fcntl.LOCK_UN)
+                blocker.close()
 
 
 if __name__ == "__main__":
