@@ -23,6 +23,30 @@
 - 増えない場合は `~/.claude/superpowers/telemetry/errors.log` を見る。理由が
   1 行ずつ入っている(詳しくは末尾の「動かないときは」)
 
+## 対応環境
+
+**Linux と macOS のみ。WSL はこれに含まれる。Windows のネイティブ環境では動作しない。**
+
+Windows で動かない理由は 2 つあり、どちらも未対応である。
+
+1. **`store.py` が `fcntl` を import している。** これは UNIX 専用モジュールで、
+   Windows の Python には存在しない。実測(Windows 11 / pyenv-win の Python 3.10.5):
+   `json` `os` `hashlib` `datetime` `time` `re` はすべて import できるが、
+   `fcntl` だけが `ModuleNotFoundError` になる。
+2. **フックが `hooks/run-hook.cmd` を経由していない。** upstream がこの polyglot
+   ラッパを用意しているのは、拡張子なしのフックスクリプトを Windows で動かすため
+   である。このフックは `hooks/custom/README.md` の「Windows 対応が実際に必要に
+   なるまでは直接呼ぶ」という方針に従い、直接呼ぶ形で登録されている。
+
+**この失敗は無言である。** `telemetry.py` はモジュール読み込みの時点で `store` を
+import するため、`fcntl` の不在は `main()` の例外捕捉に到達する *前* に起きる。
+つまり `errors.log` にすら 1 行も残らない。Windows でテレメトリが空のままなのを
+見つけたときは、設定を疑う前にここを思い出すこと。
+
+対応するなら、`fcntl` が使えない環境ではロックを諦めて追記のみにフォールバックし
+(`O_APPEND` での単一 `write` は実用上アトミックである)、フック登録を
+`run-hook.cmd` 経由に変えることになる。
+
 ## 何が記録されるか
 
 **1 行 = 1 セグメント = (セッション, ターン, skill)。**
@@ -210,6 +234,8 @@ cat 2026-*.jsonl | jq -s '
 ## 動かないときは
 
 `~/.claude/superpowers/telemetry/errors.log` に理由が 1 行ずつ入る。
-ファイルが無く、JSONL も増えていない場合は、まず[有効にする](#有効にする)の
-とおりプラグインが再インストールされ新しいセッションが始まっているかを確認し、
-次に `python3` が PATH にあるか確認する(無い場合、フックは何もせずに終了する)。
+ファイルが無く、JSONL も増えていない場合は、まず[対応環境](#対応環境)を確認する
+— Windows のネイティブ環境では何も記録されず、`errors.log` すら作られない。
+次に[有効にする](#有効にする)のとおりプラグインが再インストールされ新しい
+セッションが始まっているかを確認し、最後に `python3` が PATH にあるか確認する
+(無い場合、フックは何もせずに終了する)。

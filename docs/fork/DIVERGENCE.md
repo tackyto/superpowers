@@ -57,7 +57,7 @@ Skills tuned for the Opus 5 / Sonnet 5 generation. One row per skill, added as t
 
 | Hook | File | Trigger | Notes |
 |---|---|---|---|
-| Session telemetry | `hooks/custom/telemetry`, `hooks/custom/telemetry.py`, `hooks/custom/telemetry_lib/` | `Stop`, `SubagentStop` | Records one JSONL row per (turn × skill) under `~/.claude/superpowers/telemetry/`, for skill-improvement, cost and time analysis. New files only; `hooks/hooks.json` gains two blocks and nothing existing is touched. Python 3 standard library only, no new dependencies. See [telemetry.md](telemetry.md). |
+| Session telemetry | `hooks/custom/telemetry`, `hooks/custom/telemetry.py`, `hooks/custom/telemetry_lib/` | `Stop`, `SubagentStop` | Records one JSONL row per (turn × skill) under `~/.claude/superpowers/telemetry/`, for skill-improvement, cost and time analysis. New files only; `hooks/hooks.json` gains two blocks and nothing existing is touched. Python 3 standard library only, no new dependencies. **Linux/macOS (incl. WSL) only** — `store.py` imports `fcntl`, and the hook is not routed through `run-hook.cmd`, so on native Windows it records nothing and does so silently. See [telemetry.md](telemetry.md). |
 
 ## Upstream sync log
 
