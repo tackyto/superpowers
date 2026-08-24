@@ -25,27 +25,58 @@
 
 ## 対応環境
 
-**Linux と macOS のみ。WSL はこれに含まれる。Windows のネイティブ環境では動作しない。**
+**Linux、macOS、WSL、そして Windows のネイティブ環境。**
 
-Windows で動かない理由は 2 つあり、どちらも未対応である。
+Windows は 2026-08-24 に対応した。それ以前は無言で何も記録しなかった。当時の症状を
+覚えておく価値はある — `~/.claude/superpowers/telemetry/` が作られず、`errors.log`
+すら残らず、フックの終了コードは 0 だった。`telemetry.py` はモジュール読み込みの
+時点で `store` を import するため、`fcntl` の不在は `main()` の例外捕捉に到達する
+*前* に起きていたからである。
 
-1. **`store.py` が `fcntl` を import している。** これは UNIX 専用モジュールで、
-   Windows の Python には存在しない。実測(Windows 11 / pyenv-win の Python 3.10.5):
-   `json` `os` `hashlib` `datetime` `time` `re` はすべて import できるが、
-   `fcntl` だけが `ModuleNotFoundError` になる。
-2. **フックが `hooks/run-hook.cmd` を経由していない。** upstream がこの polyglot
-   ラッパを用意しているのは、拡張子なしのフックスクリプトを Windows で動かすため
-   である。このフックは `hooks/custom/README.md` の「Windows 対応が実際に必要に
-   なるまでは直接呼ぶ」という方針に従い、直接呼ぶ形で登録されている。
+対応にあたって直したのは 3 点。
 
-**この失敗は無言である。** `telemetry.py` はモジュール読み込みの時点で `store` を
-import するため、`fcntl` の不在は `main()` の例外捕捉に到達する *前* に起きる。
-つまり `errors.log` にすら 1 行も残らない。Windows でテレメトリが空のままなのを
-見つけたときは、設定を疑う前にここを思い出すこと。
+1. **`store.py` の `fcntl` を可搬なロックにした。** `fcntl` が import できない環境
+   では、標準ライブラリの `msvcrt` に切り替える(`_lock` / `_unlock`)。追加依存は
+   無い。Windows 側はファイル先頭の 1 バイトをセンチネルとしてロックする —
+   `msvcrt` は現在位置からの範囲ロックなので、EOF で取ると書き手ごとに別のバイトを
+   掴んでしまい排他が成立しないためである。追記は常に EOF に落ちるので、ロック領域と
+   データが衝突することはない。
+2. **フック登録を `hooks/run-hook.cmd` 経由にした。** upstream のこの polyglot ラッパ
+   が、拡張子なしのフックスクリプトのために Git Bash を見つけて起動する。
+3. **`.gitattributes` に `hooks/custom/telemetry text eol=lf` を追加した。** 拡張子が
+   無いので、これが無いと `core.autocrlf=true` の Windows で clone したときに CRLF に
+   なり、bash が `$'\r'` で落ちる。
 
-対応するなら、`fcntl` が使えない環境ではロックを諦めて追記のみにフォールバックし
-(`O_APPEND` での単一 `write` は実用上アトミックである)、フック登録を
-`run-hook.cmd` 経由に変えることになる。
+### ロックを諦める案は採れない(実測)
+
+以前このドキュメントには「`fcntl` が使えない環境ではロックを諦めて追記のみに
+フォールバックする(`O_APPEND` での単一 `write` は実用上アトミックである)」と
+書いてあった。**これは Linux の話であって、Windows では成立しない。**
+
+Windows 11 で 8 プロセス並行、`O_APPEND` の単一 `write` を実測した結果:
+
+| 1 回の write のサイズ | 結果 |
+|---|---|
+| 4KB  | 破断なし |
+| 8KB  | 3 回中 2 回で破断(67 行 / 37 行が破損・欠落) |
+| 16KB | 3 回とも破断(最悪 1280 行中 461 行が欠落) |
+| 64KB | 1053 行が破断、到達した行数は期待値の 53% |
+
+`append_records` は月ファイルごとにバッチ全体を 1 回の `write` で書くため、この
+破断域に普通に入る。`msvcrt` によるロックでは同じ負荷で破断ゼロだった。
+
+### Windows での検証
+
+Windows 側でしか確認できないこと — `fcntl` 不在での import、`msvcrt` の実効排他、
+cmd.exe と Git Bash を貫通する stdin — は専用スクリプトにまとめてある。
+Git Bash から実行する。
+
+```bash
+python3 tests/hooks/telemetry/verify-windows.py
+```
+
+Linux / macOS 側の `tests/hooks/test-telemetry.sh` は従来どおりで、Windows のロック
+*ロジック* の方は `test_store.py` が偽の `msvcrt` を使って Linux から検証している。
 
 ## 何が記録されるか
 
@@ -234,8 +265,11 @@ cat 2026-*.jsonl | jq -s '
 ## 動かないときは
 
 `~/.claude/superpowers/telemetry/errors.log` に理由が 1 行ずつ入る。
-ファイルが無く、JSONL も増えていない場合は、まず[対応環境](#対応環境)を確認する
-— Windows のネイティブ環境では何も記録されず、`errors.log` すら作られない。
-次に[有効にする](#有効にする)のとおりプラグインが再インストールされ新しい
-セッションが始まっているかを確認し、最後に `python3` が PATH にあるか確認する
-(無い場合、フックは何もせずに終了する)。
+ファイルが無く、JSONL も増えていない場合は、まず[有効にする](#有効にする)のとおり
+プラグインが再インストールされ新しいセッションが始まっているかを確認し、次に
+`python3` が PATH にあるか確認する(無い場合、フックは何もせずに終了する)。
+
+Windows で何も記録されない場合は
+[`verify-windows.py`](#windows-での検証)を走らせる。どの段階で止まっているかが出る。
+古いバージョンのプラグインが入っている可能性もある — 2026-08-24 より前のものは
+Windows では無言で何もしない。

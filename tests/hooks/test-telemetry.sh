@@ -201,7 +201,54 @@ else
     pass "prompt text does not leak into the output"
 fi
 
-# --- 8. the python unit test suite ------------------------------------------
+# --- 8. registration shape --------------------------------------------------
+# The hook must be dispatched through run-hook.cmd. On Windows that polyglot
+# wrapper is what finds Git Bash and runs this extensionless script; calling
+# hooks/custom/telemetry directly leaves the hook dead there.
+if node -e '
+const hooks = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+for (const event of ["Stop", "SubagentStop"]) {
+  const entry = hooks.hooks[event][0].hooks[0];
+  if (entry.shell !== "bash") {
+    console.error(`${event} hook shell is ${JSON.stringify(entry.shell)}, expected "bash"`);
+    process.exit(1);
+  }
+  if (!/run-hook\.cmd" custom\/telemetry$/.test(entry.command)) {
+    console.error(`unexpected ${event} command shape: ${entry.command}`);
+    process.exit(1);
+  }
+}
+' "$REPO_ROOT/hooks/hooks.json"; then
+    pass "hooks.json dispatches Stop and SubagentStop through run-hook.cmd"
+else
+    fail "hooks.json dispatches Stop and SubagentStop through run-hook.cmd"
+fi
+
+# --- 9. line endings ---------------------------------------------------------
+# The hook is an extensionless shell script, so nothing about its name tells
+# git it must keep LF. Checked out with core.autocrlf=true on Windows it would
+# gain CRLF and bash would die on $'\r' before reading a single record.
+EOL_ATTR="$(cd "$REPO_ROOT" && git check-attr eol -- hooks/custom/telemetry 2>/dev/null)"
+if [ "${EOL_ATTR##*: }" = "lf" ]; then
+    pass ".gitattributes pins hooks/custom/telemetry to LF"
+else
+    fail ".gitattributes pins hooks/custom/telemetry to LF"
+    echo "      got: ${EOL_ATTR:-<no output>}"
+fi
+
+# --- 10. the Windows verifier prints ASCII only ------------------------------
+# A Japanese Windows console is cp932, and Python dies with UnicodeEncodeError
+# on the first character it cannot encode. The verifier has to survive consoles
+# we do not control, so its source stays ASCII.
+if LC_ALL=C grep -qP '[^\x00-\x7F]' "$REPO_ROOT/tests/hooks/telemetry/verify-windows.py"; then
+    fail "verify-windows.py is ASCII-only"
+    LC_ALL=C grep -nP '[^\x00-\x7F]' "$REPO_ROOT/tests/hooks/telemetry/verify-windows.py" \
+        | sed 's/^/      /'
+else
+    pass "verify-windows.py is ASCII-only"
+fi
+
+# --- 11. the python unit test suite -----------------------------------------
 UNIT_LOG="$TEST_ROOT/unittest.log"
 if python3 -m unittest discover -s "$REPO_ROOT/tests/hooks/telemetry" -p 'test_*.py' \
         >"$UNIT_LOG" 2>&1; then

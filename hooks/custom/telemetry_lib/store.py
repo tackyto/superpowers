@@ -5,15 +5,54 @@ about the shape of a segment or of the state — callers supply both — so the
 segmentation logic stays testable without touching a disk.
 """
 
-import fcntl
 import json
 import os
 import time
 from datetime import datetime, timezone
 
+try:
+    import fcntl
+except ImportError:
+    # Windows has no fcntl. Importing it at module load is what made this hook
+    # fail invisibly there: the error arrived before telemetry.py's catch-all
+    # existed, so not even errors.log recorded a reason.
+    fcntl = None
+    import msvcrt
+
 STATE_MAX_AGE_DAYS = 30
 LOCK_ATTEMPTS = 12
 LOCK_WAIT_SECONDS = 0.05
+
+
+def _lock(handle):
+    """Take the file's exclusive lock, or raise OSError if another writer holds it.
+
+    Non-blocking on both platforms: the retry-with-jitter policy in
+    `_append_locked` owns the waiting, because a hook that observes a session
+    must never delay one.
+
+    The two locks differ in kind — flock is advisory, msvcrt's is mandatory —
+    but every writer reaches the file through this function, so nothing here
+    depends on which it is.
+    """
+    if fcntl is not None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return
+    # msvcrt locks a range starting at the current position, so rewind first:
+    # an append handle sits at EOF, and locking there would hand every writer
+    # a different byte and no mutual exclusion. Byte 0 is a sentinel — appends
+    # still land at EOF, so the lock never collides with the data being written.
+    handle.seek(0)
+    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+
+
+def _unlock(handle):
+    """Release the lock `_lock` took. Rewinds for the same reason `_lock` does."""
+    if fcntl is not None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        return
+    handle.seek(0)
+    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
 
 
 def base_dir():
@@ -63,7 +102,7 @@ def _append_locked(path, payload):
     for attempt in range(LOCK_ATTEMPTS):
         handle = open(path, "a", encoding="utf-8")
         try:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _lock(handle)
         except OSError as error:
             handle.close()
             last_error = error
@@ -74,7 +113,7 @@ def _append_locked(path, payload):
             handle.write(payload)
             handle.flush()
         finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            _unlock(handle)
             handle.close()
         return
     raise last_error

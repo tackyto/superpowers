@@ -1,4 +1,5 @@
 import fcntl
+import importlib
 import json
 import os
 import sys
@@ -234,6 +235,125 @@ class TestLockRetryPolicy(unittest.TestCase):
             finally:
                 fcntl.flock(blocker.fileno(), fcntl.LOCK_UN)
                 blocker.close()
+
+
+class FakeMsvcrt:
+    """Stand-in for the Windows-only msvcrt module.
+
+    Records what the lock path asks for, so the Windows branch can be tested
+    from Linux, where the real module cannot be imported.
+    """
+
+    LK_NBLCK = 2
+    LK_UNLCK = 0
+
+    def __init__(self):
+        self.calls = []
+        self.positions = []
+
+    def locking(self, fileno, mode, nbytes):
+        self.calls.append((mode, nbytes))
+        self.positions.append(os.lseek(fileno, 0, os.SEEK_CUR))
+
+
+class TestLockPortability(unittest.TestCase):
+    """The lock must survive on a platform without fcntl.
+
+    On Windows `import fcntl` raises at module load, before telemetry.py's
+    catch-all exists — so the hook recorded nothing and left no trace of why.
+    """
+
+    def reload_without_fcntl(self, fake):
+        """Reload store as it would import on Windows, and restore afterwards."""
+        self.addCleanup(importlib.reload, store)
+        with mock.patch.dict(sys.modules, {"fcntl": None, "msvcrt": fake}):
+            importlib.reload(store)
+
+    def test_import_succeeds_when_fcntl_is_unavailable(self):
+        self.reload_without_fcntl(FakeMsvcrt())
+        self.assertIsNone(store.fcntl)
+
+    def handle_on_a_temporary_file(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        handle = open(os.path.join(directory.name, "2026-08.jsonl"), "a", encoding="utf-8")
+        self.addCleanup(handle.close)
+        return handle
+
+    def test_lock_without_fcntl_takes_a_non_blocking_lock_on_one_byte(self):
+        """Non-blocking, because the retry-with-jitter policy owns the waiting.
+
+        A blocking lock would hold the Stop hook for as long as another writer
+        wanted, and this hook must never delay the session it observes.
+        """
+        fake = FakeMsvcrt()
+        self.reload_without_fcntl(fake)
+        store._lock(self.handle_on_a_temporary_file())
+        self.assertEqual(fake.calls, [(fake.LK_NBLCK, 1)])
+
+    def test_lock_without_fcntl_locks_byte_zero_whatever_the_handle_position(self):
+        """msvcrt locks a range starting at the current position.
+
+        An append handle that has already written sits at EOF, so without a
+        rewind every writer would lock a different byte, every lock would
+        succeed, and there would be no mutual exclusion at all.
+        """
+        fake = FakeMsvcrt()
+        self.reload_without_fcntl(fake)
+        handle = self.handle_on_a_temporary_file()
+        handle.write("x" * 100)
+        handle.flush()
+        store._lock(handle)
+        self.assertEqual(fake.positions, [0])
+
+    def test_unlock_without_fcntl_releases_the_byte_that_was_locked(self):
+        """Releasing a different range than was locked leaves the lock held.
+
+        The handle is at EOF by the time the write finishes, so _unlock has to
+        rewind for the same reason _lock does.
+        """
+        fake = FakeMsvcrt()
+        self.reload_without_fcntl(fake)
+        handle = self.handle_on_a_temporary_file()
+        handle.write("x" * 100)
+        handle.flush()
+        store._unlock(handle)
+        self.assertEqual(fake.calls, [(fake.LK_UNLCK, 1)])
+        self.assertEqual(fake.positions, [0])
+
+    def test_append_locks_and_unlocks_through_the_helpers(self):
+        """The write path must route through _lock/_unlock, not call fcntl itself.
+
+        Inlining fcntl.flock again would leave every other test in this file
+        green — on Linux — while silently removing the Windows path, which is
+        exactly the regression the helpers exist to prevent.
+        """
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        base = os.path.join(directory.name, "telemetry")
+        order = []
+        with mock.patch.object(store, "_lock", side_effect=lambda h: order.append("lock")), \
+             mock.patch.object(store, "_unlock", side_effect=lambda h: order.append("unlock")):
+            store.append_records([row()], base)
+        self.assertEqual(order, ["lock", "unlock"])
+
+    def test_appending_after_the_rewind_still_lands_at_end_of_file(self):
+        """The sentinel-byte design depends on append mode ignoring the position.
+
+        _lock rewinds to byte 0 so that every writer contends for the same byte.
+        If a write then landed at the position instead of at EOF, each batch
+        would overwrite the start of the month's file.
+        """
+        fake = FakeMsvcrt()
+        self.reload_without_fcntl(fake)
+        handle = self.handle_on_a_temporary_file()
+        handle.write("first\n")
+        handle.flush()
+        store._lock(handle)
+        handle.write("second\n")
+        handle.flush()
+        with open(handle.name, encoding="utf-8") as reader:
+            self.assertEqual(reader.read(), "first\nsecond\n")
 
 
 if __name__ == "__main__":
