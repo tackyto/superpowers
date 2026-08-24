@@ -21,6 +21,13 @@ fi
 
 # --- helpers ---
 
+# Every jq call below pipes through `tr -d '\r'`. jq.exe on Windows opens
+# stdout in text mode, so under Git Bash it returns $'version\r' for a field
+# name -- which yq's key lookup then misses -- and rewrites whole manifests
+# with CRLF. No path, field name or version string may legitimately contain a
+# carriage return, and jq escapes any inside a string as \r, so deleting the
+# byte is safe. `set -o pipefail` above keeps jq's exit status.
+
 # Read a dotted field path from a JSON file.
 # Handles both simple ("version") and nested ("plugins.0.version") paths.
 read_json_field() {
@@ -28,7 +35,7 @@ read_json_field() {
   # Convert dot-path to jq path: "plugins.0.version" -> .plugins[0].version
   local jq_path
   jq_path=$(echo "$field" | sed -E 's/\.([0-9]+)/[\1]/g' | sed 's/^/./' | sed 's/\.\././g')
-  jq -r "$jq_path" "$file"
+  jq -r "$jq_path" "$file" | tr -d '\r'
 }
 
 # Write a dotted field path in a JSON file, preserving formatting.
@@ -37,7 +44,7 @@ write_json_field() {
   local jq_path
   jq_path=$(echo "$field" | sed -E 's/\.([0-9]+)/[\1]/g' | sed 's/^/./' | sed 's/\.\././g')
   local tmp="${file}.tmp"
-  jq "$jq_path = \"$value\"" "$file" > "$tmp" && mv "$tmp" "$file"
+  jq "$jq_path = \"$value\"" "$file" | tr -d '\r' > "$tmp" && mv "$tmp" "$file"
 }
 
 require_tool() {
@@ -88,7 +95,7 @@ write_manifest_field() {
 # Read the list of declared files from config.
 # Outputs lines of "path<TAB>field"
 declared_files() {
-  jq -r '.files[] | "\(.path)\t\(.field)"' "$CONFIG"
+  jq -r '.files[] | "\(.path)\t\(.field)"' "$CONFIG" | tr -d '\r'
 }
 
 preflight_manifests() {
@@ -108,7 +115,7 @@ preflight_manifests() {
 
 # Read the audit exclude patterns from config.
 audit_excludes() {
-  jq -r '.audit.exclude[]' "$CONFIG" 2>/dev/null
+  jq -r '.audit.exclude[]' "$CONFIG" 2>/dev/null | tr -d '\r'
 }
 
 # --- commands ---

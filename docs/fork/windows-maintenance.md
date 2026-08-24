@@ -1,8 +1,8 @@
 # Windows Git Bash からフォークを保守する
 
-このフォークを Windows で**保守**する — バージョンを上げる、リリースを切る — 場合に
-必要な前提条件をまとめる。プラグインを**使う**だけなら何も要らない。インストール手順は
-[README.md](../../README.md) を見ること。
+このフォークを Windows で**保守**する — バージョンを上げる、リリースを切る — 場合の
+前提条件と、そのために入れた修正をまとめる。プラグインを**使う**だけなら何も要らない。
+インストール手順は [README.md](../../README.md) を見ること。
 
 いまこのドキュメントが扱うのはバージョン更新のツールチェーンだけである。他の保守
 スクリプトは、Windows で実際に動かして確かめられた時点で追記する。
@@ -41,20 +41,20 @@ jq: error: tag/0 is not defined at <top-level>, line 1:
 > winget install MikeFarah.yq
 ```
 
+winget は PATH を書き換えるので、**新しいシェルを開かないと `yq` は見つからない**。
 入っているものが mikefarah 版かどうかは、バージョン表示に出る URL で判別する。
 
 ```console
 $ yq --version
-yq (https://github.com/mikefarah/yq/) version v4.49.2
+yq (https://github.com/mikefarah/yq/) version v4.53.6
 ```
 
 `https://github.com/mikefarah/yq/` が出なければ別物である。
 
-## 入れずに実行した場合
+## `yq` を入れずに実行した場合
 
-安全側に倒れる。中途半端な状態にはならない。
-
-`--check` は読めたところまで表示し、足りないツールを名指しして止まる。
+安全側に倒れる。中途半端な状態にはならない。`--check` は読めたところまで表示し、
+足りないツールを名指しして止まる。
 
 ```console
 $ scripts/bump-version.sh --check
@@ -80,26 +80,71 @@ $ echo $?
 「9 つの manifest が同じバージョンに揃っている」という不変条件は、`yq` が無いという
 理由では壊れない。
 
-## 回避路 — WSL / Linux から実行する
+## Windows の `jq` は CRLF を出す — このフォークが直した点
 
-Windows 側に `yq` を入れたくないなら、バージョン更新とリリース作業だけを WSL または
-Linux 側で行えばよい。`scripts/bump-version.sh` はリポジトリのファイルを書き換える
-だけで、Windows 固有の要素を一切持たない。
-
-## なぜ `yq` 依存を外さないのか
-
-`scripts/bump-version.sh`、`.version-bump.json`、`tests/version-bump/` はいずれも
-upstream 由来で、フォーク時点(`fork-base/v6.3.0`)と同一である。しかも upstream は
-このスクリプトをリリースのたびに更新している。
+`yq` を正しく入れても、素の `scripts/bump-version.sh` は Windows では動かなかった。
+原因は `yq` ではなく `jq` の側にある。ネイティブの `jq.exe` は標準出力をテキスト
+モードで開くため、印字する行がすべて `\r\n` で終わる。
 
 ```console
-$ git log --oneline -- scripts/bump-version.sh
-b36e082 Release v6.3.0 ...
-1f20bef Release v5.0.7 ...
+$ jq -rn '"hello"' | od -c
+0000000   h   e   l   l   o  \r  \n        <- jq 1.8.2 (Windows)
+
+$ yq -rn '"hello"' | od -c
+0000000   h   e   l   l   o  \n            <- yq は Go 製なので LF
 ```
 
-`yq` を `sed` の行置換に替えれば依存は消える。だが上流が保守しているファイルを
-書き換えることになり、同期のたびに同じコンフリクトを解き続けることになる。加えて
+`declared_files()` はこの出力を `while IFS=$'\t' read -r path field` で読む。結果、
+フィールド名が `version\r` になる。`bash -x` の実測:
+
+```console
+++ read_yaml_field .../plugin.yaml $'version\r'
+Error: no matches found
+```
+
+`strenv(FIELD)` が `version\r` を返し、`.["version\r"]` はどのキーにも当たらない。
+これが `--check` と `bump` の両方を止めていた。被害はそれだけではなく、
+
+- `write_json_field` は `jq` の出力をそのままファイルに落とすので、**JSON manifest
+  8 つが CRLF に書き換わる**(実測: `{\n` → `{\r\n`)。
+- `read_json_field` が返すバージョン文字列にも `\r` が付く。`--audit` はその文字列で
+  リポジトリを `grep` するため何にも当たらず、**未宣言ファイルがあっても
+  「All clear」と報告する**。
+- `audit_excludes()` の除外パターンにも `\r` が付き、`--exclude` が効かない。
+
+`jq` の出力を消費する 4 箇所すべてに `tr -d '\r'` を挟んで直した。パス名・フィールド名・
+バージョン文字列に CR が正当に含まれることはなく、文字列内部の CR は `jq` が `\r` と
+エスケープして出すので、バイトを消して問題ない。スクリプト冒頭の `set -o pipefail`
+により `jq` の終了ステータスも保たれる。
+
+`jq -b`(バイナリ出力)でも直るが、`-b` は `jq` 1.7 で追加されたフラグで 1.6 には無い。
+`tr` を選んだのはそのためである。
+
+回帰テストは `tests/version-bump/test-bump-version.sh` にある。PATH に「`jq` の出力へ
+CR を足す」シムを置くことで、Linux 上でも Windows と同じ壊れ方を再現している。
+
+## 動作確認
+
+Windows 11 / Git Bash (`uname -o` = `Msys`) / `jq` 1.8.2 / `yq` 4.53.6 で、
+作業ツリーを Windows の一時ディレクトリに展開して実測した。
+
+| 確認項目 | 結果 |
+|---|---|
+| `scripts/bump-version.sh --check` | 9 manifest すべて表示、exit 0 |
+| `tests/version-bump/test-bump-version.sh` | PASS |
+| `scripts/bump-version.sh 1.0.1`(実際に更新) | 9 ファイルすべて 1.0.1、exit 0 |
+| 更新後の JSON manifest 8 つの改行 | すべて LF(CR なし) |
+
+## WSL / Linux から実行してもよい
+
+Windows 側に何も入れたくないなら、バージョン更新とリリース作業だけを WSL または
+Linux 側で行えばよい。`scripts/bump-version.sh` はリポジトリのファイルを書き換える
+だけで、Windows 固有の要素を持たない。
+
+## なぜ `yq` 依存そのものは外さないのか
+
+`scripts/bump-version.sh` と `tests/version-bump/` は upstream 由来である。CRLF の修正は
+Windows で動かすために避けられなかったが、`yq` を `sed` の行置換に替える変更は別で、
+上流が保守しているファイルの書き換え量を増やすだけの見返りしかない。加えて
 `select(tag == "!!str")` の型チェック — upstream 自身のテストが `version: 123` という
-フィクスチャで検証している挙動 — を自前で書き直す必要がある。保守のときにしか効かない
-利便性のために払う代償としては大きい。
+フィクスチャで検証している挙動 — を自前で書き直す必要がある。
