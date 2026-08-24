@@ -73,4 +73,57 @@ cmp -s "$TEST_ROOT/package.before" "$invalid_repo/package.json" \
 cmp -s "$TEST_ROOT/plugin.before" "$invalid_repo/.hermes-plugin/plugin.yaml" \
   || fail "invalid YAML manifest changed"
 
+# --- a jq that emits CRLF, the way jq.exe does on Windows ------------------
+#
+# Native jq.exe opens stdout in text mode, so every line it prints ends in
+# \r\n. Under Git Bash that puts $'version\r' into the field name -- yq's key
+# lookup then misses and the bump aborts -- and sends the JSON manifests
+# through a rewrite that leaves CRLF on every line. Neither is visible on a
+# platform where jq prints LF, so the shim below reproduces both here.
+
+crlf_repo="$TEST_ROOT/crlf"
+make_fixture "$crlf_repo" $'name: superpowers\nversion: 1.2.3'
+printf 'v2.3.4 released\n' >"$crlf_repo/CHANGELOG.md"
+printf 'pinned at 2.3.4\n' >"$crlf_repo/notes.md"
+cat >"$crlf_repo/.version-bump.json" <<'JSON'
+{
+  "files": [
+    { "path": "package.json", "field": "version" },
+    { "path": ".hermes-plugin/plugin.yaml", "field": "version" }
+  ],
+  "audit": { "exclude": ["CHANGELOG.md"] }
+}
+JSON
+
+shim_dir="$TEST_ROOT/crlf-shim"
+mkdir -p "$shim_dir"
+real_jq="$(command -v jq)"
+cat >"$shim_dir/jq" <<SHIM
+#!/usr/bin/env bash
+set -o pipefail
+"$real_jq" "\$@" | awk '{ printf "%s\r\n", \$0 }'
+SHIM
+chmod +x "$shim_dir/jq"
+
+PATH="$shim_dir:$PATH" /bin/bash "$crlf_repo/scripts/bump-version.sh" 2.3.4 \
+  >"$TEST_ROOT/crlf.out" 2>&1 \
+  || fail "bump failed under a CRLF-emitting jq: $(cat "$TEST_ROOT/crlf.out")"
+
+[[ "$(yq -r '.version' "$crlf_repo/.hermes-plugin/plugin.yaml")" == "2.3.4" ]] \
+  || fail "YAML manifest was not bumped under a CRLF-emitting jq"
+
+if grep -q $'\r' "$crlf_repo/package.json"; then
+  fail "bump rewrote the JSON manifest with CRLF line endings"
+fi
+
+if grep -q 'CHANGELOG.md' "$TEST_ROOT/crlf.out"; then
+  fail "audit exclusions did not apply under a CRLF-emitting jq"
+fi
+
+# A version string carrying a stray CR matches nothing, so the audit would
+# report "All clear" while an undeclared file sits right there.
+if ! grep -q 'notes.md' "$TEST_ROOT/crlf.out"; then
+  fail "audit missed an undeclared file under a CRLF-emitting jq"
+fi
+
 echo "Version-bump tests passed"

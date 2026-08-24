@@ -72,7 +72,9 @@ Independent SemVer, started at `1.0.0` from upstream's `v6.3.0`.
 
 - Fork releases: `vX.Y.Z`. Upstream tags: `upstream/vX.Y.Z`. Fork point: `fork-base/v6.3.0`.
 - Nine manifest files carry the version — bump them all with `scripts/bump-version.sh <version>`,
-  never by hand. It requires `jq` and `yq` on PATH.
+  never by hand. It requires `jq` and **mikefarah/yq** (the Go one — the Python `yq` is a
+  `jq` wrapper and cannot run its filters) on PATH. Maintaining the fork from Windows:
+  [docs/fork/windows-maintenance.md](docs/fork/windows-maintenance.md).
 - Version conflicts on every upstream release are expected. Take either side, then re-run
   `bump-version.sh`. Do not add a `merge=ours` driver for those files — it would silently drop
   genuine new fields upstream adds.

@@ -59,7 +59,9 @@ Independent SemVer, started at `1.0.0` from upstream's `v6.3.0`.
 - Upstream tags are fetched into the `upstream/` tag namespace (`upstream/v6.3.0`).
 - The fork point is tagged `fork-base/v6.3.0`.
 - Nine manifest files carry the version. `scripts/bump-version.sh <version>` updates all of
-  them at once — it needs `jq` and `yq` on PATH.
+  them at once — it needs `jq` and **mikefarah/yq** (the Go one; the Python `yq` is a `jq`
+  wrapper and cannot run its filters) on PATH. Doing this from Windows Git Bash:
+  [windows-maintenance.md](windows-maintenance.md).
 
 ## Syncing from upstream
 
