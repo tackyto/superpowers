@@ -77,15 +77,25 @@ afterward.
 
 1. The batch section validates the script name and resolves the hook directory
    from the dispatcher's own location.
-2. It tries bash in three places:
+2. It picks a bash, in order:
    - `C:\Program Files\Git\bin\bash.exe`
    - `C:\Program Files (x86)\Git\bin\bash.exe`
-   - `bash` on `PATH` (MSYS2, Cygwin, or a non-default Git install)
-3. If bash is found, it runs the named extensionless hook script from the hooks
-   directory.
-4. If no bash is found, the dispatcher exits `0` silently — the plugin
+   - the bash beside whatever `git` is on `PATH` — `<root>\cmd\git.exe` gives
+     `<root>\bin\bash.exe` — which covers a Git for Windows installed anywhere
+     else
+   - `bash` on `PATH`, but only when `uname -o` reports `Msys` or `Cygwin`
+     (MSYS2, Cygwin, or a Git Bash reached through `PATH`)
+3. If a bash was picked, it runs the named extensionless hook script from the
+   hooks directory and exits with **the hook's own** exit code.
+4. If no usable bash is found, the dispatcher exits `0` silently — the plugin
    continues working, it just skips the hook.
 5. `exit /b` stops CMD before it reaches the Unix section.
+
+The flavour check in the last step is not paranoia. On a machine with WSL
+installed, `where bash` finds `C:\Windows\System32\bash.exe` — the WSL
+launcher, which cannot open a Windows path. Handing it the hook starts WSL only
+to fail, which is neither running the hook nor the silent skip step 4
+describes.
 
 ### How it works on Unix (bash/sh)
 
@@ -102,6 +112,9 @@ afterward.
 | No `-l` (login shell) | Not needed; hook scripts should be self-contained and not depend on login-shell PATH setup |
 | No `cygpath` | Bash receives the Windows path directly and handles it correctly; `cygpath` was needed by the old `-c "..."` invocation pattern, not by direct exec |
 | Silent exit on no-bash | Avoids breaking the plugin for users who don't have Git for Windows; hook context injection is skipped gracefully |
+| Reject a `PATH` bash that is not MSYS/Cygwin | With WSL installed, `where bash` finds the WSL launcher, which cannot open a Windows path. Starting WSL to fail on every hook is worse than skipping the hook |
+| Derive bash from `git` before consulting `PATH` | Finds a non-default Git for Windows install without guessing at paths, and avoids paying a WSL cold start to discover the `PATH` bash is unusable |
+| One invocation site rather than one per branch | `exit /b %ERRORLEVEL%` inside a parenthesised `if` block expands when the block is *parsed*, before the hook has run. With the calls spread across branches, every hook looked like it succeeded no matter how it exited |
 
 ## Writing Cross-Platform Hook Scripts
 
@@ -142,7 +155,9 @@ escape_for_json() {
 
 ### "bash is not recognized"
 
-CMD couldn't find bash in any of the three locations the dispatcher tries. The dispatcher exits silently (0) rather than erroring, so the hook is skipped. Install Git for Windows at the standard path or ensure `bash` is on `PATH`.
+CMD couldn't find a usable bash in any of the four places the dispatcher looks. It exits silently (0) rather than erroring, so the hook is skipped. Install Git for Windows at the standard path, or put `git` on `PATH` so the dispatcher can find the bash beside it.
+
+Note that having *a* `bash` on `PATH` is not enough on its own: if it is WSL's launcher, the dispatcher rejects it on purpose and skips the hook.
 
 ### Hook runs on Unix but does nothing on Windows
 

@@ -164,6 +164,17 @@ else
     fail "hooks.json registers SessionStart with shell:bash dispatch"
 fi
 
+# The Windows dispatch verifier runs on consoles we do not control. A Japanese
+# Windows console is cp932, and Python dies with UnicodeEncodeError on the first
+# character it cannot encode, so that script's source stays ASCII.
+if LC_ALL=C grep -qP '[^\x00-\x7F]' "$REPO_ROOT/tests/hooks/verify-windows-dispatch.py"; then
+    fail "verify-windows-dispatch.py is ASCII-only"
+    LC_ALL=C grep -nP '[^\x00-\x7F]' "$REPO_ROOT/tests/hooks/verify-windows-dispatch.py" \
+        | sed 's/^/      /'
+else
+    pass "verify-windows-dispatch.py is ASCII-only"
+fi
+
 claude_home="$(make_home claude-code)"
 assert_command_output \
     "Claude Code emits nested SessionStart additionalContext" \
