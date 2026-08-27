@@ -258,6 +258,53 @@ else
     sed 's/^/      /' "$UNIT_LOG"
 fi
 
+# --- 12. a payload is UTF-8 even where the locale is not --------------------
+#
+# Claude Code sends UTF-8. Python decodes stdin with the locale encoding, which
+# on a Japanese Windows install is cp932, and 52 of cp932's 60 lead bytes
+# swallow a following backslash. A payload carrying non-ASCII immediately
+# before an escaped quote therefore loses the backslash, the string ends early,
+# and the parse dies with "Expecting ',' delimiter" before the hook has even
+# learned the session id. PYTHONIOENCODING reproduces that here.
+
+run_hook_as() {
+    local encoding="$1" home="$2" outdir="$3" payload="$4"
+    printf '%s' "$payload" | env -i PATH="${PATH:-}" HOME="$home" \
+        SUPERPOWERS_TELEMETRY_DIR="$outdir" \
+        CLAUDE_PLUGIN_ROOT="$REPO_ROOT" \
+        PYTHONIOENCODING="$encoding" \
+        bash "$HOOK_UNDER_TEST"
+}
+
+# The field name is irrelevant; the byte sequence is the whole point.
+make_utf8_payload() {
+    python3 -c 'import json,sys; sys.stdout.write(json.dumps({
+      "session_id": "sess-utf8", "hook_event_name": "Stop",
+      "transcript_path": sys.argv[1], "cwd": sys.argv[2],
+      "note": "日本語\"x\""}, ensure_ascii=False))' "$1" "$2"
+}
+
+for ENCODING in utf-8 cp932; do
+    CASE12="$TEST_ROOT/case12-$ENCODING"
+    mkdir -p "$CASE12/home" "$CASE12/out"
+    make_transcript "$CASE12/transcript.jsonl"
+    PAYLOAD12="$(make_utf8_payload "$CASE12/transcript.jsonl" "$REPO_ROOT")"
+    run_hook_as "$ENCODING" "$CASE12/home" "$CASE12/out" "$PAYLOAD12" >/dev/null
+
+    if [ -s "$CASE12/out/2026-08.jsonl" ]; then
+        pass "non-ASCII payload is recorded under PYTHONIOENCODING=$ENCODING"
+    else
+        fail "non-ASCII payload is recorded under PYTHONIOENCODING=$ENCODING"
+    fi
+
+    if [ -f "$CASE12/out/errors.log" ]; then
+        fail "no error is logged under PYTHONIOENCODING=$ENCODING"
+        sed 's/^/      /' "$CASE12/out/errors.log"
+    else
+        pass "no error is logged under PYTHONIOENCODING=$ENCODING"
+    fi
+done
+
 echo
 if [ "$FAILURES" -eq 0 ]; then
     echo "All telemetry hook tests passed."

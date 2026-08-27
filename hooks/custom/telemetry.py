@@ -128,7 +128,13 @@ def main():
     base = store.base_dir()
     session = "unknown"
     try:
-        raw = sys.stdin.read()
+        # Read bytes and decode UTF-8 rather than trusting sys.stdin's encoding:
+        # the harness sends UTF-8, but Python picks the locale encoding, which on
+        # a Japanese Windows install is cp932. 52 of cp932's 60 lead bytes consume
+        # a following backslash, so non-ASCII sitting just before an escaped quote
+        # loses that backslash, the string ends early, and the payload fails to
+        # parse before this hook has even learned which session it belongs to.
+        raw = sys.stdin.buffer.read().decode("utf-8", "replace")
         payload = json.loads(raw) if raw.strip() else {}
         if not isinstance(payload, dict):
             payload = {}

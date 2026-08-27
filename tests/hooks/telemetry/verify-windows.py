@@ -200,12 +200,18 @@ def check_dispatch():
         transcript = os.path.join(tmpdir, "transcript.jsonl")
         out = os.path.join(tmpdir, "out")
         write_transcript(transcript)
+        # ensure_ascii=False on purpose: the payload has to reach Python as real
+        # UTF-8 bytes. "\u65e5\u672c\u8a9e" is Japanese text sitting immediately
+        # before an escaped quote -- the pattern that cp932 breaks, because 52 of
+        # its 60 lead bytes swallow the backslash that follows them. Escaped here
+        # so this file stays ASCII for a cp932 console to print.
         payload = json.dumps({
             "session_id": "verify-windows",
             "hook_event_name": "Stop",
             "transcript_path": transcript,
             "cwd": REPO_ROOT,
-        })
+            "note": "\u65e5\u672c\u8a9e\"x\"",
+        }, ensure_ascii=False)
 
         environment = dict(os.environ)
         environment["SUPERPOWERS_TELEMETRY_DIR"] = out
