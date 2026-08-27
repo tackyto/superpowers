@@ -62,6 +62,10 @@ Independent SemVer, started at `1.0.0` from upstream's `v6.3.0`.
   them at once — it needs `jq` and **mikefarah/yq** (the Go one; the Python `yq` is a `jq`
   wrapper and cannot run its filters) on PATH. Doing this from Windows Git Bash:
   [windows-maintenance.md](windows-maintenance.md).
+- Fork releases are written up in [RELEASE-NOTES.md](RELEASE-NOTES.md), not in the repository
+  root's `RELEASE-NOTES.md` — upstream prepends to that file on every release, so sharing it
+  would conflict on every sync. Add the entry, bump, then tag `vX.Y.Z` on `main` after the
+  merge.
 
 ## Syncing from upstream
 
