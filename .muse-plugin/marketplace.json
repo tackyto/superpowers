@@ -1,0 +1,20 @@
+{
+  "name": "superpowers-tackyto",
+  "description": "Personal fork marketplace for the Superpowers core skills library",
+  "owner": {
+    "name": "tackyto",
+    "url": "https://github.com/tackyto"
+  },
+  "plugins": [
+    {
+      "name": "superpowers",
+      "description": "Core skills library for Muse: TDD, debugging, collaboration patterns, and proven techniques",
+      "version": "1.2.0",
+      "source": "./",
+      "author": {
+        "name": "tackyto",
+        "url": "https://github.com/tackyto"
+      }
+    }
+  ]
+}

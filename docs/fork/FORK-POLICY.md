@@ -58,9 +58,10 @@ Independent SemVer, started at `1.0.0` from upstream's `v6.3.0`.
 - Fork releases are tagged `vX.Y.Z`.
 - Upstream tags are fetched into the `upstream/` tag namespace (`upstream/v6.3.0`).
 - The fork point is tagged `fork-base/v6.3.0`.
-- Nine manifest files carry the version. `scripts/bump-version.sh <version>` updates all of
-  them at once — it needs `jq` and **mikefarah/yq** (the Go one; the Python `yq` is a `jq`
-  wrapper and cannot run its filters) on PATH. Doing this from Windows Git Bash:
+- The manifest files that carry the version are declared in `.version-bump.json` — eleven as
+  of upstream `v6.4.2`. `scripts/bump-version.sh <version>` updates all of them at once — it
+  needs `jq` and **mikefarah/yq** (the Go one; the Python `yq` is a `jq` wrapper and cannot run
+  its filters) on PATH. Doing this from Windows Git Bash:
   [windows-maintenance.md](windows-maintenance.md).
 - Fork releases are written up in [RELEASE-NOTES.md](RELEASE-NOTES.md), not in the repository
   root's `RELEASE-NOTES.md` — upstream prepends to that file on every release, so sharing it
@@ -77,7 +78,7 @@ scripts/bump-version.sh <fork-version>    # re-assert fork version numbers
 git switch main && git merge --no-ff sync/upstream-<version>
 ```
 
-Version-field conflicts across the nine manifests are expected on every upstream release.
+Version-field conflicts across every declared manifest are expected on every upstream release.
 Take either side; `bump-version.sh` overwrites them all afterwards. Do **not** add a
 `merge=ours` driver for those files — it would silently drop genuine new fields upstream adds.
 
