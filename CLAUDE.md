@@ -71,10 +71,11 @@ Prefer additive change: a new file never conflicts. Custom hooks belong in `hook
 Independent SemVer, started at `1.0.0` from upstream's `v6.3.0`.
 
 - Fork releases: `vX.Y.Z`. Upstream tags: `upstream/vX.Y.Z`. Fork point: `fork-base/v6.3.0`.
-- Nine manifest files carry the version — bump them all with `scripts/bump-version.sh <version>`,
-  never by hand. It requires `jq` and **mikefarah/yq** (the Go one — the Python `yq` is a
-  `jq` wrapper and cannot run its filters) on PATH. Maintaining the fork from Windows:
-  [docs/fork/windows-maintenance.md](docs/fork/windows-maintenance.md).
+- The manifest files that carry the version are declared in `.version-bump.json` — eleven as of
+  upstream `v6.4.2`, and upstream adds one with each new harness. Bump them all with
+  `scripts/bump-version.sh <version>`, never by hand. It requires `jq` and **mikefarah/yq** (the
+  Go one — the Python `yq` is a `jq` wrapper and cannot run its filters) on PATH. Maintaining
+  the fork from Windows: [docs/fork/windows-maintenance.md](docs/fork/windows-maintenance.md).
 - Version conflicts on every upstream release are expected. Take either side, then re-run
   `bump-version.sh`. Do not add a `merge=ours` driver for those files — it would silently drop
   genuine new fields upstream adds.
@@ -100,8 +101,9 @@ decision costs nothing.
 ## Eval Harness
 
 Skill-behaviour evals live in [superpowers-evals](https://github.com/prime-radiant-inc/superpowers-evals/),
-cloned into `evals/` — see `evals/README.md` for setup. Drill drives real tmux sessions of
-Claude Code / Codex / Gemini CLI and judges skill compliance with an LLM verifier.
+cloned into `evals/` — see `evals/README.md` for setup. Quorum, the harness CLI (renamed from
+Drill), drives real coding-agent CLIs through a Gauntlet QA agent and grades them against each
+scenario's acceptance criteria plus deterministic post-checks.
 Plugin-infrastructure tests live in `tests/`.
 
 ## Zero Dependencies
