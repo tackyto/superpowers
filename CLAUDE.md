@@ -71,8 +71,8 @@ Prefer additive change: a new file never conflicts. Custom hooks belong in `hook
 Independent SemVer, started at `1.0.0` from upstream's `v6.3.0`.
 
 - Fork releases: `vX.Y.Z`. Upstream tags: `upstream/vX.Y.Z`. Fork point: `fork-base/v6.3.0`.
-- The manifest files that carry the version are declared in `.version-bump.json` — eleven as of
-  upstream `v6.4.2`, and upstream adds one with each new harness. Bump them all with
+- The manifest files that carry the version are declared in `.version-bump.json` — twelve as of
+  upstream `v7.0.0`, and upstream adds one with each new harness. Bump them all with
   `scripts/bump-version.sh <version>`, never by hand. It requires `jq` and **mikefarah/yq** (the
   Go one — the Python `yq` is a `jq` wrapper and cannot run its filters) on PATH. Maintaining
   the fork from Windows: [docs/fork/windows-maintenance.md](docs/fork/windows-maintenance.md).

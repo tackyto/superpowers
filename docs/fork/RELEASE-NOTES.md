@@ -8,6 +8,44 @@ upstream のリリースノートは [../../RELEASE-NOTES.md](../../RELEASE-NOTE
 バージョンは upstream とは独立した SemVer で、upstream `v6.3.0` を起点に `1.0.0` から始まる。
 詳しくは [FORK-POLICY.md](FORK-POLICY.md) を見ること。
 
+## v1.3.0 (2026-10-13)
+
+upstream `v7.0.0` の取り込み。
+
+### upstream から入ったもの
+
+- **`brainstorming` が作り直された。** 何を作りたいか・なぜかを、具体的な場面を尋ねる質問で
+  引き出し、理解した内容を数百語で言い返して訂正を受ける。推測は推測と明示する。理解が固まって
+  から作業の大きさを判断し、すぐ済む作業はそのまま実施、小さな変更はチャットで合意、
+  プロジェクト規模なら設計ドキュメントを書く。spec-document reviewer は廃止され、新しい
+  サブエージェントが「実装する人」として設計を読み、残る疑問を挙げる builder check に
+  置き換わった。プラットフォームや言語などの選択をユーザー自身が決めたいかも確認する。
+- **新ハーネス: Antigravity のネイティブ plugin manifest(`.antigravity-plugin/plugin.json`)。**
+  Antigravity には session-start フックが無く、`using-superpowers` の description によって
+  起動される。
+- **SessionStart フックが、壊れた・空の `PATH` でも動く**(anthropics/claude-code#43127)。
+- `sdd-workspace` がリポジトリ自身の `.superpowers/sdd/.gitignore` を上書きしなくなった。
+  `task-done` が出力なしで成功したテストも記録する。`requesting-code-review` の例が
+  スキル引数で壊れなくなった。`systematic-debugging` の例が秘密の値を出力しなくなった。
+
+### フォーク側の対応
+
+- **`hooks/run-hook.cmd` は upstream 版をほぼそのまま採用した。** upstream は v1.1.0 で
+  フォークが直したのと同じ 2 つのバグ(WSL ランチャーの誤選択、終了コードの消失)を独立に
+  修正した。upstream 版は WSL ランチャーをディレクトリで除外して**起動すらしない**。
+  フォーク版の `uname -o` による判定は、判定のためにランチャーを一度起動していた。
+  さらに upstream 版はカレントディレクトリに置かれた `where.bat` や `bash.cmd` を実行しない
+  (フォーク版は実行し得た)。フォーク独自の「`git` の場所から bash を導出する」段だけを、
+  upstream と同じ安全な書き方で足した。Git for Windows は `<root>\cmd` しか `PATH` に
+  入れないので、標準以外の場所にインストールされた Git の bash は、この段が無いと見つからない。
+- Windows 実機で検証済み。`verify-windows-dispatch.py` は全項目合格。upstream の
+  `test-run-hook-cmd-windows.sh` は `café-bin` の 1 件だけ失敗するが、これは upstream の
+  未改変ファイルでも同様に失敗する(コードページ 932 が原因と推測、未確認)。WindowsApps の
+  ケースは、`%TEMP%` が 8.3 短縮名だと誤って失敗するので、`TMPDIR` を長い形式にして実行する。
+- `.antigravity-plugin/plugin.json` が upstream 所有のまま新規追加されたので、フォーク所有に
+  変更した。移植ガイドに増えた `agy plugin install` の URL も、フォークに向け直した。
+- **バージョンを持つ manifest が 11 から 12 に増えた**(`.antigravity-plugin/plugin.json`)。
+
 ## v1.2.0 (2026-09-29)
 
 upstream `v6.4.1` / `v6.4.2` の取り込み。フォーク独自の変更は、そのマージを成立させるための
