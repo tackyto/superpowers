@@ -8,6 +8,34 @@ upstream のリリースノートは [../../RELEASE-NOTES.md](../../RELEASE-NOTE
 バージョンは upstream とは独立した SemVer で、upstream `v6.3.0` を起点に `1.0.0` から始まる。
 詳しくは [FORK-POLICY.md](FORK-POLICY.md) を見ること。
 
+## v1.4.0 (2026-10-27)
+
+upstream `v7.0.1` の取り込み。フォーク独自の変更は、そのマージを成立させるためのものだけ。
+
+### upstream から入ったもの
+
+- **`brainstorming` の再調整。** v7.0.0 の作り直しで定型的になっていた質問を改善した。
+  既存プロジェクトや指定された spec・計画・ファイルを最初に読み、そこで答えが出ていることは
+  尋ねない。依頼内容がはっきりしていれば、調べた内容と合わせて言い返し、残る一点だけを尋ねる。
+  「質問を飛ばすか」の提案は、ユーザーが名指しで呼んだときには出さない。2〜3 案を示して
+  推奨を付け、選んでもらってから設計ドキュメントを書き、承認まで実装しない。
+- **長いスキルがコンパクション後も欠けにくくなった。** Claude Code はコンパクション後に
+  各スキルを 20,000 文字で切って再添付するため、それ以降の指示が失われていた。
+  `subagent-driven-development` は fix loop・final review・報告の扱い・再開・preflight・
+  batching・cannot-verify を、`writing-skills` は補助ドキュメントを `references/` に分け、
+  必要な段階でディスクから読む。`executing-plans` は重複していた Example Workflow を削除。
+- **`tests/skill-size/test-skill-size.sh`(新規)** — `SKILL.md` が 20,000 バイトに達すると失敗する。
+- `diagnosing-superpowers` が下書きする issue に「誰が提出するか」と人間が書く要約の欄が増え、
+  要約がプレースホルダのままでは提出しない。
+
+### フォーク側の対応
+
+- **`AGENTS.md`・`README.md`(Contributing)・PR テンプレートは ours を維持した。** upstream の
+  変更(#2569)は obra/superpowers への貢献規約の強化で、このフォークには適用されない。
+- issue テンプレートは upstream 版のまま更新を受け入れた(フォークでは未改変)。
+- upstream が `docs/superpowers/plans/` の過去の計画を削除した。フォーク独自の計画
+  (`2026-08-21-session-telemetry-hook.md`)は残っている。
+
 ## v1.3.0 (2026-10-13)
 
 upstream `v7.0.0` の取り込み。
